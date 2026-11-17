@@ -1,12 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../services/mail_service.dart';
 import '../state/app_state.dart';
 import 'compose_page.dart';
+import 'mac_style.dart';
 import 'message_list.dart';
 import 'message_view.dart';
 import 'settings_page.dart';
@@ -118,39 +119,40 @@ class _HomePageState extends State<HomePage> {
       },
     };
 
-    final actions = [
-      if (state.aiReady && state.allInboxMessages.isNotEmpty)
-        wide
-            ? TextButton.icon(
-                icon: const Icon(Icons.auto_awesome, size: 16),
-                label: const Text('Catch me up'),
-                onPressed: () => _catchUp(state),
-              )
-            : IconButton(
-                icon: const Icon(Icons.auto_awesome),
-                tooltip: 'Catch me up',
-                onPressed: () => _catchUp(state),
-              ),
-      IconButton(icon: const Icon(Icons.edit_square), tooltip: 'New message (⌘N)', onPressed: _compose),
-      IconButton(icon: const Icon(Icons.settings_outlined), tooltip: 'Settings (⌘,)', onPressed: _settings),
-      const SizedBox(width: 8),
-    ];
-
     final Widget body;
     if (wide) {
       body = Row(children: [
-        const SizedBox(width: 240, child: Sidebar()),
-        const VerticalDivider(width: 1),
-        SizedBox(width: 380, child: MessageListPane(searchFocus: _searchFocus)),
-        const VerticalDivider(width: 1),
-        const Expanded(child: MessageView()),
+        SizedBox(width: 220, child: Sidebar(onSettings: _settings)),
+        const Hairline(vertical: true),
+        SizedBox(
+          width: 340,
+          child: MessageListPane(
+            searchFocus: _searchFocus,
+            onCompose: _compose,
+            onCatchUp: state.allInboxMessages.isEmpty ? null : () => _catchUp(state),
+          ),
+        ),
+        const Hairline(vertical: true),
+        Expanded(child: MessageView(search: MailSearchField(focus: _searchFocus))),
       ]);
     } else if (_showingMessageOnPhone && selected != null) {
-      body = MessageView(onBack: () => setState(() => _showingMessageOnPhone = false));
+      body = SafeArea(child: MessageView(onBack: () => setState(() => _showingMessageOnPhone = false)));
     } else {
-      body = MessageListPane(
-        searchFocus: _searchFocus,
-        onOpen: () => setState(() => _showingMessageOnPhone = true),
+      body = SafeArea(
+        child: MessageListPane(
+          searchFocus: _searchFocus,
+          showSearch: true,
+          onCompose: _compose,
+          onCatchUp: state.allInboxMessages.isEmpty ? null : () => _catchUp(state),
+          leading: Builder(
+            builder: (bc) => ToolButton(
+              icon: CupertinoIcons.sidebar_left,
+              tooltip: 'Mailboxes',
+              onPressed: () => Scaffold.of(bc).openDrawer(),
+            ),
+          ),
+          onOpen: () => setState(() => _showingMessageOnPhone = true),
+        ),
       );
     }
 
@@ -159,17 +161,12 @@ class _HomePageState extends State<HomePage> {
       child: Focus(
         autofocus: true,
         child: Scaffold(
-          appBar: AppBar(
-            toolbarHeight: 48,
-            titleSpacing: 16,
-            title: Text(
-              selected == null || wide ? 'Hearthmail' : MailService.subjectOf(selected),
-              style: Theme.of(context).textTheme.titleMedium,
-              overflow: TextOverflow.ellipsis,
-            ),
-            actions: actions,
-          ),
-          drawer: wide ? null : Drawer(child: SafeArea(child: Sidebar(onNavigate: () => Navigator.of(context).pop()))),
+          backgroundColor: useMacWindow ? Colors.transparent : null,
+          drawer: wide
+              ? null
+              : Drawer(
+                  child: Sidebar(onSettings: _settings, onNavigate: () => Navigator.of(context).pop()),
+                ),
           body: body,
         ),
       ),

@@ -22,10 +22,29 @@ import '../services/user_data.dart';
 import '../services/vector_index.dart';
 
 /// What the message list is showing.
-enum ViewKind { allInboxes, folder, priority, needsReply, category, search, vip, snoozed, scheduled, followUp }
+enum ViewKind { allInboxes, folder, priority, needsReply, category, search, vip, snoozed, scheduled, followUp, flagged }
 
 /// Quick filters above the message list.
 enum ListFilter { all, unread, flagged, attachments }
+
+/// Apple Mail–style inbox categories, built from the AI's finer categories.
+enum InboxCategory {
+  primary('Primary'),
+  transactions('Transactions'),
+  updates('Updates'),
+  promotions('Promotions'),
+  all('All Mail');
+
+  const InboxCategory(this.label);
+  final String label;
+
+  static InboxCategory of(MailCategory c) => switch (c) {
+        MailCategory.finance || MailCategory.shopping || MailCategory.travel => InboxCategory.transactions,
+        MailCategory.notification || MailCategory.social => InboxCategory.updates,
+        MailCategory.newsletter || MailCategory.promotion => InboxCategory.promotions,
+        _ => InboxCategory.primary,
+      };
+}
 
 class MailView {
   const MailView.allInboxes() : kind = ViewKind.allInboxes, category = null, accountId = null, path = null;
@@ -38,6 +57,7 @@ class MailView {
   const MailView.snoozed() : kind = ViewKind.snoozed, category = null, accountId = null, path = null;
   const MailView.scheduled() : kind = ViewKind.scheduled, category = null, accountId = null, path = null;
   const MailView.followUp() : kind = ViewKind.followUp, category = null, accountId = null, path = null;
+  const MailView.flagged() : kind = ViewKind.flagged, category = null, accountId = null, path = null;
 
   final ViewKind kind;
   final MailCategory? category;
@@ -51,6 +71,7 @@ class MailView {
       kind == ViewKind.needsReply ||
       kind == ViewKind.category ||
       kind == ViewKind.vip ||
+      kind == ViewKind.flagged ||
       kind == ViewKind.snoozed;
 
   @override
@@ -147,6 +168,32 @@ class AppState extends ChangeNotifier {
   /// Local organization data (VIPs, reminders, scheduled mail, …).
   UserData userData = UserData.memory();
   ListFilter listFilter = ListFilter.all;
+  InboxCategory inboxCategory = InboxCategory.primary;
+
+  /// The category bar shows once the AI sorts mail.
+  bool get categoriesEnabled => aiReady && settings.autoSort;
+
+  bool get _categoryApplies =>
+      categoriesEnabled &&
+      inboxCategory != InboxCategory.all &&
+      (view.kind == ViewKind.allInboxes || (view.kind == ViewKind.folder && folderBox?.isInbox == true));
+
+  /// Which Apple-style category a message belongs to. VIP, flagged and
+  /// high-priority mail always stays in Primary.
+  InboxCategory categoryOf(MimeMessage m) {
+    final t = triageOf(m);
+    if (t == null || m.isFlagged || isVipMessage(m) || t.priority == MailPriority.high) return InboxCategory.primary;
+    return InboxCategory.of(t.category);
+  }
+
+  void setInboxCategory(InboxCategory c) {
+    inboxCategory = c;
+    selected = null;
+    notifyListeners();
+  }
+
+  int unreadInCategory(InboxCategory c) =>
+      _viewMessages(view).where((m) => !m.isSeen && (c == InboxCategory.all || categoryOf(m) == c)).length;
 
   // ------------------------------------------------------------------ AI
 
@@ -526,7 +573,8 @@ class AppState extends ChangeNotifier {
 
   /// Messages for the current view.
   List<MimeMessage> get visibleMessages {
-    final all = _viewMessages(view);
+    var all = _viewMessages(view);
+    if (_categoryApplies) all = all.where((m) => categoryOf(m) == inboxCategory).toList();
     return listFilter == ListFilter.all || view.kind == ViewKind.search ? all : all.where(_passesFilter).toList();
   }
 
@@ -546,6 +594,8 @@ class AppState extends ChangeNotifier {
         return _inbox.where((m) => triageOf(m)?.category == view.category).toList();
       case ViewKind.vip:
         return _inbox.where(isVipMessage).toList();
+      case ViewKind.flagged:
+        return allInboxMessages.where((m) => m.isFlagged).toList();
       case ViewKind.snoozed:
         return allInboxMessages.where((m) => snoozeOf(m)?.isDue == false).toList();
       case ViewKind.scheduled:

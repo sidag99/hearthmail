@@ -49,3 +49,6 @@ app.*.map.json
 
 # Local signing (contains your Apple team ID)
 macos/Runner/Configs/Signing.xcconfig
+
+# Local tool working copies
+.claude/

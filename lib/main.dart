@@ -5,9 +5,11 @@ import 'services/settings_store.dart';
 import 'state/app_state.dart';
 import 'ui/account_setup_page.dart';
 import 'ui/home_page.dart';
+import 'ui/mac_style.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await setUpMacWindow();
   final store = await SettingsStore.open();
   final state = AppState(store);
   runApp(ChangeNotifierProvider.value(value: state, child: const HearthmailApp()));
@@ -18,22 +20,7 @@ Future<void> main() async {
 class HearthmailApp extends StatelessWidget {
   const HearthmailApp({super.key});
 
-  static ThemeData buildTheme(Brightness b) {
-    final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF5B5BD6), brightness: b);
-    return ThemeData(
-      colorScheme: scheme,
-      useMaterial3: true,
-      visualDensity: VisualDensity.compact,
-      dividerTheme: DividerThemeData(color: scheme.outlineVariant.withValues(alpha: 0.6), space: 1),
-      appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-      ),
-      snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating, width: 420),
-    );
-  }
+  static ThemeData buildTheme(Brightness b) => buildMacTheme(b);
 
   @override
   Widget build(BuildContext context) {

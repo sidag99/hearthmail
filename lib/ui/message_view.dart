@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:enough_mail/enough_mail.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
@@ -13,6 +14,7 @@ import '../services/mail_service.dart';
 import '../state/app_state.dart';
 import 'compose_page.dart';
 import 'email_web_view.dart';
+import 'mac_style.dart';
 import 'sidebar.dart';
 import 'widgets/ai_widgets.dart';
 
@@ -65,60 +67,67 @@ Future<DateTime?> pickDateTime(BuildContext context, {String help = 'Pick a time
 }
 
 class MessageView extends StatelessWidget {
-  const MessageView({super.key, this.onBack});
+  const MessageView({super.key, this.onBack, this.search});
 
   final VoidCallback? onBack;
+
+  /// The search field, shown at the right end of the toolbar (wide windows).
+  final Widget? search;
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final m = state.selected;
-    final theme = Theme.of(context);
-    if (m == null) {
-      return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.mail_outline, size: 48, color: theme.colorScheme.outlineVariant),
-          const SizedBox(height: 8),
-          Text('No message selected', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
-        ]),
-      );
-    }
-    return Column(children: [
-      MessageToolbar(message: m, onBack: onBack),
-      const Divider(height: 1),
-      Expanded(
-        child: state.loadingSelected
-            ? const Center(child: CircularProgressIndicator())
-            // Rebuild everything (incl. AI panels) when the message changes.
-            : _MessageBody(key: ObjectKey(m), message: m),
-      ),
-    ]);
+    final c = MacColors.of(context);
+    return ColoredBox(
+      color: c.window,
+      child: Column(children: [
+        SizedBox(height: kToolbarHeight52, child: MessageToolbar(message: m, onBack: onBack, search: search)),
+        const Hairline(),
+        Expanded(
+          child: m == null
+              ? Center(child: Text('No Message Selected', style: TextStyle(fontSize: 15, color: c.tertiaryLabel, fontWeight: FontWeight.w500)))
+              : state.loadingSelected
+                  ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+                  // A new body (incl. AI panels) for each message; the key
+                  // also lets the toolbar's ✨ menu reach it.
+                  : _MessageBody(key: _bodyKey(m), message: m),
+        ),
+      ]),
+    );
   }
 }
 
+GlobalObjectKey<_MessageBodyState> _bodyKey(MimeMessage m) => GlobalObjectKey<_MessageBodyState>(m);
+
+/// Mail's toolbar: archive, delete, junk · reply, reply all, forward · flag,
+/// remind · ✨ AI · more, then search.
 class MessageToolbar extends StatelessWidget {
-  const MessageToolbar({super.key, required this.message, this.onBack});
-  final MimeMessage message;
+  const MessageToolbar({super.key, required this.message, this.onBack, this.search});
+  final MimeMessage? message;
   final VoidCallback? onBack;
+  final Widget? search;
 
   @override
   Widget build(BuildContext context) {
     final state = context.read<AppState>();
     final m = message;
-    final sender = MailService.senderOf(m)?.email;
-    final owner = state.sessionOf(m);
-    final here = state.mailboxOf(m);
+    final c = MacColors.of(context);
     final narrow = MediaQuery.sizeOf(context).width < 700;
+    VoidCallback? on(void Function(MimeMessage m) f) => m == null ? null : () => f(m);
 
-    Future<void> snoozeMenu(Offset? at) async {
+    Future<void> snoozeMenu(BuildContext bc) async {
+      if (m == null) return;
+      final box = bc.findRenderObject() as RenderBox?;
+      final at = box?.localToGlobal(Offset(0, box.size.height)) ?? const Offset(400, 60);
       final choice = await showMenu<Object>(
         context: context,
-        position: RelativeRect.fromLTRB(at?.dx ?? 400, at?.dy ?? 60, at?.dx ?? 400, 0),
+        position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx + 1, 0),
         items: [
           for (final (label, time) in snoozeChoices())
-            PopupMenuItem(value: time, child: Text('$label  ·  ${DateFormat('E HH:mm').format(time)}')),
-          const PopupMenuItem(value: 'custom', child: Text('Pick date & time…')),
-          if (state.snoozeOf(m) != null) const PopupMenuItem(value: 'cancel', child: Text('Cancel reminder')),
+            PopupMenuItem(value: time, height: 32, child: Text('$label  ·  ${DateFormat('E HH:mm').format(time)}')),
+          const PopupMenuItem(value: 'custom', height: 32, child: Text('Pick Date & Time…')),
+          if (state.snoozeOf(m) != null) const PopupMenuItem(value: 'cancel', height: 32, child: Text('Cancel Reminder')),
         ],
       );
       if (!context.mounted) return;
@@ -132,109 +141,124 @@ class MessageToolbar extends StatelessWidget {
       }
     }
 
-    Future<void> moveMenu() async {
-      final boxes = (owner?.mailboxes ?? const <Mailbox>[]).where((b) => b.path != here?.path).toList();
-      final target = await showDialog<Mailbox>(
-        context: context,
-        builder: (c) => SimpleDialog(
-          title: const Text('Move to'),
-          children: [
-            for (final b in boxes)
-              SimpleDialogOption(
-                onPressed: () => Navigator.pop(c, b),
-                child: Row(children: [Icon(mailboxIcon(b), size: 18), const SizedBox(width: 10), Text(b.isInbox ? 'Inbox' : b.name)]),
-              ),
-          ],
+    final body = m == null ? null : _bodyKey(m).currentState;
+    final aiMenu = ToolbarItem(
+      child: PopupMenuButton<String>(
+        tooltip: 'AI Tools',
+        enabled: m != null && state.aiReady,
+        onSelected: (v) {
+          final b = m == null ? null : _bodyKey(m).currentState;
+          switch (v) {
+            case 'summary':
+              b?.showSummary();
+            case 'replies':
+              b?.showQuickReplies();
+            case 'reply':
+              b?.replyWithAi();
+            case 'translate':
+              b?.translateNow();
+            case 'calendar':
+              b?.addToCalendarNow();
+          }
+        },
+        itemBuilder: (_) => [
+          const PopupMenuItem(value: 'summary', height: 32, child: Text('Summarize')),
+          const PopupMenuItem(value: 'replies', height: 32, child: Text('Quick Replies')),
+          const PopupMenuItem(value: 'reply', height: 32, child: Text('Reply with AI…')),
+          const PopupMenuDivider(),
+          PopupMenuItem(value: 'translate', height: 32, child: Text(body?.showingTranslation == true ? 'Show Original' : 'Translate')),
+          const PopupMenuItem(value: 'calendar', height: 32, child: Text('Add to Calendar')),
+        ],
+        child: SizedBox(
+          width: 32,
+          height: 28,
+          child: Icon(CupertinoIcons.sparkles, size: 17, color: m != null && state.aiReady ? c.accent : c.tertiaryLabel),
         ),
-      );
-      if (target != null) await state.moveMessage(m, target);
-    }
+      ),
+    );
 
-    Future<void> confirmBlock() async {
-      if (sender == null) return;
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: Text('Block $sender?'),
-          content: const Text('Their emails will go straight to Junk on this computer. You can unblock them in Settings.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Block')),
-          ],
-        ),
-      );
-      if (ok == true) await state.blockSender(sender);
-    }
-
-    final more = PopupMenuButton<String>(
-      tooltip: 'More',
-      icon: const Icon(Icons.more_horiz),
-      onSelected: (v) async {
-        switch (v) {
-          case 'forward':
-            openForward(context, m);
-          case 'replyAll':
-            openReply(context, m, replyAll: true);
-          case 'move':
-            await moveMenu();
-          case 'junk':
-            await state.junkMessage(m);
-          case 'vip':
-            if (sender != null) await state.toggleVip(sender);
-          case 'block':
-            await confirmBlock();
-          case 'mute':
-            await state.muteThread(m);
-          case 'read':
-            await state.toggleRead(m);
-        }
-      },
-      itemBuilder: (_) => [
-        if (narrow) const PopupMenuItem(value: 'replyAll', child: Text('Reply all')),
-        if (narrow) const PopupMenuItem(value: 'forward', child: Text('Forward')),
-        const PopupMenuItem(value: 'move', child: Text('Move to…')),
-        const PopupMenuItem(value: 'junk', child: Text('Move to Junk')),
-        PopupMenuItem(value: 'read', child: Text(m.isSeen ? 'Mark as unread' : 'Mark as read')),
-        const PopupMenuDivider(),
-        if (sender != null)
-          PopupMenuItem(value: 'vip', child: Text(state.userData.isVip(sender) ? 'Remove from VIPs' : 'Add sender to VIPs')),
-        PopupMenuItem(value: 'mute', child: Text(state.isMuted(m) ? 'Unmute conversation' : 'Mute conversation')),
-        if (sender != null) PopupMenuItem(value: 'block', child: Text('Block $sender')),
-      ],
+    final more = ToolbarItem(
+      child: PopupMenuButton<String>(
+        tooltip: 'More',
+        enabled: m != null,
+        onSelected: (v) async {
+          if (m == null) return;
+          final sender = MailService.senderOf(m)?.email;
+          switch (v) {
+            case 'forward':
+              openForward(context, m);
+            case 'replyAll':
+              openReply(context, m, replyAll: true);
+            case 'junk':
+              await state.junkMessage(m);
+            case 'read':
+              await state.toggleRead(m);
+            case 'menu':
+              // The full right-click menu has everything else.
+              final box = context.findRenderObject() as RenderBox?;
+              final at = box == null ? const Offset(600, 60) : box.localToGlobal(Offset(box.size.width - 200, box.size.height));
+              if (context.mounted) await showMessageMenu(context, m, at);
+            case 'vip':
+              if (sender != null) await state.toggleVip(sender);
+            case 'mute':
+              await state.muteThread(m);
+          }
+        },
+        itemBuilder: (_) {
+          final sender = m == null ? null : MailService.senderOf(m)?.email;
+          return [
+            if (narrow) const PopupMenuItem(value: 'replyAll', height: 32, child: Text('Reply All')),
+            if (narrow) const PopupMenuItem(value: 'forward', height: 32, child: Text('Forward')),
+            if (narrow) const PopupMenuItem(value: 'junk', height: 32, child: Text('Move to Junk')),
+            PopupMenuItem(value: 'read', height: 32, child: Text(m?.isSeen == true ? 'Mark as Unread' : 'Mark as Read')),
+            if (sender != null)
+              PopupMenuItem(
+                  value: 'vip', height: 32, child: Text(state.userData.isVip(sender) ? 'Remove from VIPs' : 'Add Sender to VIPs')),
+            PopupMenuItem(
+                value: 'mute', height: 32, child: Text(m != null && state.isMuted(m) ? 'Unmute Conversation' : 'Mute Conversation')),
+            const PopupMenuItem(value: 'menu', height: 32, child: Text('Move, Block…')),
+          ];
+        },
+        child: SizedBox(width: 32, height: 28, child: Icon(CupertinoIcons.ellipsis_circle, size: 17, color: m == null ? c.tertiaryLabel : c.secondaryLabel)),
+      ),
     );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(children: [
-        if (onBack != null) IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack, tooltip: 'Back'),
-        IconButton(icon: const Icon(Icons.reply), tooltip: 'Reply (⌘R)', onPressed: () => openReply(context, m)),
+        if (onBack != null) ToolButton(icon: CupertinoIcons.chevron_left, tooltip: 'Back', onPressed: onBack),
+        ToolButton(icon: CupertinoIcons.archivebox, tooltip: 'Archive (⌃⌘A)', onPressed: on(state.archiveMessage)),
+        ToolButton(icon: CupertinoIcons.trash, tooltip: 'Delete (⌘⌫)', onPressed: on(state.deleteMessage)),
+        if (!narrow) ToolButton(icon: CupertinoIcons.xmark_octagon, tooltip: 'Move to Junk (⇧⌘J)', onPressed: on(state.junkMessage)),
+        const SizedBox(width: 10),
+        ToolButton(icon: CupertinoIcons.arrowshape_turn_up_left, tooltip: 'Reply (⌘R)', onPressed: on((m) => openReply(context, m))),
         if (!narrow)
-          IconButton(
-            icon: const Icon(Icons.reply_all),
-            tooltip: 'Reply all (⇧⌘R)',
-            onPressed: () => openReply(context, m, replyAll: true),
+          ToolButton(
+            icon: CupertinoIcons.arrowshape_turn_up_left_2,
+            tooltip: 'Reply All (⇧⌘R)',
+            onPressed: on((m) => openReply(context, m, replyAll: true)),
           ),
         if (!narrow)
-          IconButton(icon: const Icon(Icons.forward), tooltip: 'Forward (⇧⌘F)', onPressed: () => openForward(context, m)),
-        const SizedBox(width: 8),
-        IconButton(icon: const Icon(Icons.archive_outlined), tooltip: 'Archive (⌘E)', onPressed: () => state.archiveMessage(m)),
-        IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Delete (⌘⌫)', onPressed: () => state.deleteMessage(m)),
-        IconButton(
-          icon: Icon(m.isFlagged ? Icons.flag : Icons.outlined_flag),
-          tooltip: m.isFlagged ? 'Unflag (⇧⌘L)' : 'Flag (⇧⌘L)',
-          onPressed: () => state.toggleFlag(m),
+          ToolButton(icon: CupertinoIcons.arrowshape_turn_up_right, tooltip: 'Forward (⇧⌘F)', onPressed: on((m) => openForward(context, m))),
+        const SizedBox(width: 10),
+        ToolButton(
+          icon: m?.isFlagged == true ? CupertinoIcons.flag_fill : CupertinoIcons.flag,
+          color: m?.isFlagged == true ? const Color(0xFFFF9500) : null,
+          tooltip: 'Flag (⇧⌘L)',
+          onPressed: on(state.toggleFlag),
         ),
         Builder(
-          builder: (bc) => IconButton(
-            icon: Icon(state.snoozeOf(m) != null ? Icons.alarm_on : Icons.alarm),
-            tooltip: 'Remind me',
-            onPressed: () {
-              final box = bc.findRenderObject() as RenderBox?;
-              snoozeMenu(box?.localToGlobal(Offset(0, box.size.height)));
-            },
+          builder: (bc) => ToolButton(
+            icon: CupertinoIcons.alarm,
+            color: m != null && state.snoozeOf(m) != null ? const Color(0xFFAF52DE) : null,
+            tooltip: 'Remind Me',
+            onPressed: m == null ? null : () => snoozeMenu(bc),
           ),
         ),
+        aiMenu,
         more,
+        const Spacer(),
+        if (search != null) SizedBox(width: 230, child: search),
       ]),
     );
   }
@@ -409,12 +433,54 @@ class _MessageBodyState extends State<_MessageBody> {
     super.dispose();
   }
 
+  // Called from the toolbar's ✨ menu.
+  void showSummary() => setState(() => _showSummary = true);
+  void showQuickReplies() {
+    final state = context.read<AppState>();
+    if (state.ai == null) return;
+    final replies = state.ai!.quickReplies(state.contentOf(widget.message));
+    setState(() {
+      _quickReplies = replies;
+    });
+  }
+
+  void translateNow() => _showTranslation ? setState(() => _showTranslation = false) : _translate(context.read<AppState>());
+  Future<void> addToCalendarNow() => _addToCalendar(context.read<AppState>());
+  bool get showingTranslation => _showTranslation;
+
+  Future<void> replyWithAi() async {
+    final c = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('Reply with AI'),
+        content: SizedBox(
+          width: 380,
+          child: TextField(
+            controller: c,
+            autofocus: true,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(hintText: 'What should the reply say? e.g. "yes, but Thursday works better"'),
+            onSubmitted: (v) => Navigator.pop(d, v),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(d, c.text), child: const Text('Write Reply')),
+        ],
+      ),
+    );
+    c.dispose();
+    if (text != null && mounted) openReply(context, widget.message, aiInstruction: text);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final m = widget.message;
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final c = MacColors.of(context);
     final dark = theme.brightness == Brightness.dark;
     final sender = MailService.senderOf(m);
     final date = MailService.dateOf(m);
@@ -423,125 +489,126 @@ class _MessageBodyState extends State<_MessageBody> {
     final isHtml = !(_showTranslation && _translated != null) && (m.decodeTextHtmlPart()?.trim().isNotEmpty ?? false);
     final triage = state.triageOf(m);
     final owner = state.sessions.length > 1 ? state.sessionOf(m) : null;
-    final suspicion = MailService.suspicionOf(m) ?? (triage?.suspicious == true ? 'The AI thinks this email may be a phishing or scam attempt.' : null);
+    final suspicion = MailService.suspicionOf(m) ??
+        (triage?.suspicious == true ? 'The AI thinks this email may be a phishing or scam attempt.' : null);
     final unsub = MailService.unsubscribeOf(m);
     final snooze = state.snoozeOf(m);
     final vip = sender != null && state.userData.isVip(sender.email);
     final attachments = m.findContentInfo(disposition: ContentDisposition.attachment);
 
-    Widget banner(IconData icon, Color color, Widget text, {List<Widget> actions = const []}) => Container(
-          margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-          child: Row(children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 8),
-            Expanded(child: DefaultTextStyle.merge(style: theme.textTheme.bodySmall, child: text)),
-            ...actions,
-          ]),
-        );
+    // Mail-style notice line: small icon, text, blue link on the right.
+    Widget notice(IconData icon, String text, {Color? color, String? action, VoidCallback? onAction}) => Column(children: [
+          const Hairline(),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(children: [
+              Icon(icon, size: 14, color: color ?? c.secondaryLabel),
+              const SizedBox(width: 8),
+              Expanded(child: Text(text, style: TextStyle(fontSize: 12, color: color ?? c.secondaryLabel))),
+              if (action != null) TextButton(onPressed: onAction, child: Text(action)),
+            ]),
+          ),
+        ]);
 
     final header = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SelectableText(MailService.subjectOf(m), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
-      const SizedBox(height: 12),
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        CircleAvatar(radius: 18, child: Text(MailService.senderName(m).characters.first.toUpperCase())),
+        InitialsAvatar(MailService.senderName(m), size: 40),
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Flexible(
-                child: SelectableText.rich(TextSpan(children: [
-                  TextSpan(text: MailService.senderName(m), style: const TextStyle(fontWeight: FontWeight.w600)),
-                  if (sender != null && sender.personalName?.isNotEmpty == true)
-                    TextSpan(text: '  <${sender.email}>', style: TextStyle(color: scheme.onSurfaceVariant)),
-                ])),
+                child: Tooltip(
+                  message: sender?.email ?? '',
+                  child: SelectableText(MailService.senderName(m),
+                      maxLines: 1, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.label)),
+                ),
               ),
               if (sender != null)
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  iconSize: 16,
-                  icon: Icon(vip ? Icons.star_rounded : Icons.star_outline_rounded, color: vip ? const Color(0xFFFFB224) : null),
-                  tooltip: vip ? 'VIP · click to remove' : 'Add to VIPs',
-                  onPressed: () => state.toggleVip(sender.email),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: InkWell(
+                    onTap: () => state.toggleVip(sender.email),
+                    child: Tooltip(
+                      message: vip ? 'VIP · click to remove' : 'Add to VIPs',
+                      child: Icon(vip ? CupertinoIcons.star_fill : CupertinoIcons.star,
+                          size: 13, color: vip ? const Color(0xFFFF9500) : c.tertiaryLabel),
+                    ),
+                  ),
                 ),
             ]),
-            Text(
-                'To: ${MailService.displayList(m.to)}'
-                '${(m.cc ?? []).isEmpty ? '' : '   Cc: ${MailService.displayList(m.cc)}'}',
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 2),
+            SelectableText(MailService.subjectOf(m), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.label)),
+            const SizedBox(height: 2),
+            Text.rich(
+              TextSpan(children: [
+                TextSpan(text: 'To: ', style: TextStyle(color: c.secondaryLabel)),
+                TextSpan(text: MailService.displayList(m.to), style: TextStyle(color: c.label)),
+                if ((m.cc ?? []).isNotEmpty) ...[
+                  TextSpan(text: '   Cc: ', style: TextStyle(color: c.secondaryLabel)),
+                  TextSpan(text: MailService.displayList(m.cc), style: TextStyle(color: c.label)),
+                ],
+              ]),
+              style: const TextStyle(fontSize: 12),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ]),
         ),
+        const SizedBox(width: 8),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           if (date != null)
-            Text(DateFormat.yMMMd().add_jm().format(date.toLocal()),
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+            Text(DateFormat.yMMMd().add_jm().format(date.toLocal()), style: TextStyle(fontSize: 12, color: c.secondaryLabel)),
           if (owner != null)
+            Padding(padding: const EdgeInsets.only(top: 3), child: AccountBadge(config: owner.config, index: state.indexOf(owner))),
+          if (state.aiReady && !_showSummary)
             Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: AccountBadge(config: owner.config, index: state.indexOf(owner)),
+              padding: const EdgeInsets.only(top: 8),
+              child: _Pill(icon: CupertinoIcons.sparkles, label: 'Summarize', onTap: showSummary),
             ),
         ]),
       ]),
+      const SizedBox(height: 10),
       if (suspicion != null)
-        banner(Icons.gpp_maybe_outlined, scheme.error, Text('Be careful: $suspicion Don\'t click links or share passwords or codes.')),
+        notice(CupertinoIcons.exclamationmark_shield, 'Be careful: $suspicion Don\'t click links or share passwords or codes.',
+            color: const Color(0xFFFF3B30)),
       if (snooze != null && !snooze.isDue)
-        banner(Icons.alarm, scheme.primary, Text('Reminder set for ${DateFormat('E d MMM, HH:mm').format(snooze.until)}'),
-            actions: [TextButton(onPressed: () => state.unsnooze(m), child: const Text('Cancel'))]),
+        notice(CupertinoIcons.alarm, 'Reminder set for ${DateFormat('E d MMM, HH:mm').format(snooze.until)}',
+            action: 'Cancel', onAction: () => state.unsnooze(m)),
       if (_language != null || _showTranslation)
-        banner(
-          Icons.translate,
-          scheme.primary,
-          Text(_showTranslation
-              ? (_translating ? 'Translating from ${_language ?? 'the original'}…' : 'Translated from ${_language ?? 'the original'} by your local AI')
-              : 'This email is in $_language.'),
-          actions: [
-            TextButton(
-              onPressed: _translating
-                  ? null
-                  : () => _showTranslation ? setState(() => _showTranslation = false) : _translate(state),
-              child: Text(_showTranslation ? 'Show original' : 'Translate to ${state.settings.myLanguage}'),
-            ),
-          ],
+        notice(
+          CupertinoIcons.globe,
+          _showTranslation
+              ? (_translating ? 'Translating from ${_language ?? 'the original'}…' : 'Translated from ${_language ?? 'the original'}')
+              : 'This message is in $_language.',
+          action: _translating ? null : (_showTranslation ? 'Show Original' : 'Translate to ${state.settings.myLanguage}'),
+          onAction: translateNow,
         ),
       if (unsub != null)
-        banner(Icons.unsubscribe_outlined, scheme.onSurfaceVariant, const Text('This email is from a mailing list.'),
-            actions: [
-              TextButton(
-                onPressed: _unsubscribing ? null : () => _unsubscribe(state),
-                child: Text(_unsubscribing ? 'Unsubscribing…' : 'Unsubscribe'),
-              ),
-            ]),
+        notice(CupertinoIcons.envelope, 'This message is from a mailing list.',
+            action: _unsubscribing ? 'Unsubscribing…' : 'Unsubscribe', onAction: _unsubscribing ? null : () => _unsubscribe(state)),
       if (isHtml && !allowImages && doc.blockedImages > 0)
-        banner(Icons.image_not_supported_outlined, scheme.onSurfaceVariant,
-            const Text('Remote images are blocked to protect your privacy.'),
-            actions: [TextButton(onPressed: () => setState(() => _loadImages = true), child: const Text('Load images'))]),
-      const SizedBox(height: 12),
-      if (state.aiReady) ...[
-        _aiBar(context, state, m),
-        if (_showSummary) ...[
-          const SizedBox(height: 10),
-          AiCard(
-            title: 'Summary',
-            onClose: () => setState(() => _showSummary = false),
-            child: AiStreamView(placeholder: 'Summarizing…', start: () => state.ai!.summarize(state.contentOf(m))),
-          ),
-        ],
-        if (_quickReplies != null) ...[
-          const SizedBox(height: 10),
-          _quickReplyCard(context, m),
-        ],
-        if (triage != null && triage.needsReply && !m.isAnswered && _quickReplies == null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text('This email looks like it is waiting for your reply.',
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.primary)),
-          ),
+        notice(CupertinoIcons.photo, 'This message contains remote content.',
+            action: 'Load Remote Content', onAction: () => setState(() => _loadImages = true)),
+      if (triage != null && triage.needsReply && !m.isAnswered && _quickReplies == null && state.aiReady)
+        notice(CupertinoIcons.arrowshape_turn_up_left, 'This message looks like it is waiting for your reply.',
+            color: c.accent, action: 'Quick Replies', onAction: showQuickReplies),
+      if (_showSummary) ...[
+        const SizedBox(height: 6),
+        AiCard(
+          title: 'Summary',
+          onClose: () => setState(() => _showSummary = false),
+          child: AiStreamView(placeholder: 'Summarizing…', start: () => state.ai!.summarize(state.contentOf(m))),
+        ),
       ],
+      if (_quickReplies != null) ...[
+        const SizedBox(height: 6),
+        _quickReplyCard(context, m),
+      ],
+      if (_findingEvent)
+        notice(CupertinoIcons.calendar_badge_plus, 'Looking for a date in this message…'),
       if (attachments.isNotEmpty) ...[
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 6, children: [
           for (final info in attachments) _AttachmentChip(message: m, info: info),
         ]),
@@ -549,79 +616,19 @@ class _MessageBodyState extends State<_MessageBody> {
       const SizedBox(height: 10),
     ]);
 
+    final bodyBg = isHtml || !dark ? Colors.white : const Color(0xFF1F1F22);
     return LayoutBuilder(builder: (context, box) {
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         ConstrainedBox(
           constraints: BoxConstraints(maxHeight: box.maxHeight * 0.55),
-          child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(24, 18, 24, 0), child: header),
+          child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: header),
         ),
-        Expanded(
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              // HTML email is designed for a white page, so it keeps one
-              // even in dark mode. Plain text follows the app theme.
-              color: isHtml || !dark ? Colors.white : const Color(0xFF1F1F22),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-            ),
-            child: EmailWebView(html: doc.html, background: isHtml || !dark ? Colors.white : const Color(0xFF1F1F22)),
-          ),
-        ),
+        const Hairline(),
+        // HTML email is designed for a white page, so it keeps one even in
+        // dark mode. Plain text follows the app theme.
+        Expanded(child: ColoredBox(color: bodyBg, child: EmailWebView(html: doc.html, background: bodyBg))),
       ]);
     });
-  }
-
-  Widget _aiBar(BuildContext context, AppState state, MimeMessage m) {
-    return Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-      FilledButton.tonalIcon(
-        icon: const Icon(Icons.auto_awesome, size: 16),
-        label: const Text('Summarize'),
-        onPressed: () => setState(() => _showSummary = true),
-      ),
-      FilledButton.tonalIcon(
-        icon: const Icon(Icons.bolt, size: 16),
-        label: const Text('Quick replies'),
-        onPressed: () {
-          final replies = state.ai!.quickReplies(state.contentOf(m));
-          setState(() {
-            _quickReplies = replies;
-          });
-        },
-      ),
-      FilledButton.tonalIcon(
-        icon: _findingEvent
-            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-            : const Icon(Icons.event, size: 16),
-        label: const Text('Add to Calendar'),
-        onPressed: _findingEvent ? null : () => _addToCalendar(state),
-      ),
-      if (_language == null)
-        FilledButton.tonalIcon(
-          icon: const Icon(Icons.translate, size: 16),
-          label: Text(_showTranslation ? 'Original' : 'Translate'),
-          onPressed: _translating ? null : () => _showTranslation ? setState(() => _showTranslation = false) : _translate(state),
-        ),
-      SizedBox(
-        width: 340,
-        child: TextField(
-          controller: _instruction,
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: 'Reply with AI: "say yes, but Thursday works better"',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.edit_note, size: 18),
-              tooltip: 'Draft reply',
-              onPressed: () => openReply(context, m, aiInstruction: _instruction.text),
-            ),
-          ),
-          onSubmitted: (v) => openReply(context, m, aiInstruction: v),
-        ),
-      ),
-    ]);
   }
 
   Widget _quickReplyCard(BuildContext context, MimeMessage m) {
@@ -654,6 +661,32 @@ class _MessageBodyState extends State<_MessageBody> {
             Text('Click one to turn it into a full reply you can edit.', style: Theme.of(context).textTheme.labelSmall),
           ]);
         },
+      ),
+    );
+  }
+}
+
+/// A small rounded button, like Mail's "Summarize".
+class _Pill extends StatelessWidget {
+  const _Pill({required this.icon, required this.label, required this.onTap});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MacColors.of(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(color: c.fill, borderRadius: BorderRadius.circular(12)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 12, color: c.accent),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.label)),
+        ]),
       ),
     );
   }

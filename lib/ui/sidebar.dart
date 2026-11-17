@@ -1,4 +1,6 @@
 import 'package:enough_mail/enough_mail.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
+import 'package:macos_window_utils/widgets/transparent_macos_sidebar.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -6,6 +8,7 @@ import '../models/account_config.dart';
 import '../models/triage.dart';
 import '../state/app_state.dart';
 import 'account_setup_page.dart';
+import 'mac_style.dart';
 
 Color categoryColor(MailCategory c) => switch (c) {
       MailCategory.personal => const Color(0xFFE5484D),
@@ -22,30 +25,34 @@ Color categoryColor(MailCategory c) => switch (c) {
 
 /// A distinct color per account, used for its dot in lists.
 Color accountColor(int index) => const [
-      Color(0xFF5B5BD6),
-      Color(0xFF12A594),
-      Color(0xFFF76B15),
-      Color(0xFFD6409F),
-      Color(0xFF0090FF),
-      Color(0xFF30A46C),
-      Color(0xFFE5484D),
-      Color(0xFF8E4EC6),
+      Color(0xFF007AFF),
+      Color(0xFF34C759),
+      Color(0xFFFF9500),
+      Color(0xFFAF52DE),
+      Color(0xFFFF2D55),
+      Color(0xFF5AC8FA),
+      Color(0xFFFFCC00),
+      Color(0xFF8E8E93),
     ][index % 8];
 
 IconData mailboxIcon(Mailbox b) {
-  if (b.isInbox) return Icons.inbox_outlined;
-  if (b.isSent) return Icons.send_outlined;
-  if (b.isDrafts) return Icons.edit_note;
-  if (b.isTrash) return Icons.delete_outline;
-  if (b.isJunk) return Icons.report_gmailerrorred;
-  if (b.isArchive) return Icons.archive_outlined;
-  if (b.hasFlag(MailboxFlag.all)) return Icons.all_inbox_outlined;
-  if (b.hasFlag(MailboxFlag.flagged)) return Icons.star_outline;
-  return Icons.folder_outlined;
+  if (b.isInbox) return CupertinoIcons.tray;
+  if (b.isSent) return CupertinoIcons.paperplane;
+  if (b.isDrafts) return CupertinoIcons.doc_text;
+  if (b.isTrash) return CupertinoIcons.trash;
+  if (b.isJunk) return CupertinoIcons.exclamationmark_octagon;
+  if (b.isArchive) return CupertinoIcons.archivebox;
+  if (b.hasFlag(MailboxFlag.all)) return CupertinoIcons.tray_full;
+  if (b.hasFlag(MailboxFlag.flagged)) return CupertinoIcons.flag;
+  return CupertinoIcons.folder;
 }
 
+/// The Mail-style source list: Favorites, Smart Mailboxes, then each
+/// account with its mailboxes. Translucent over the desktop on macOS.
 class Sidebar extends StatefulWidget {
-  const Sidebar({super.key, this.onNavigate});
+  const Sidebar({super.key, this.onNavigate, this.onSettings});
+
+  final VoidCallback? onSettings;
 
   /// Called after the user picks something (closes the drawer on phones).
   final VoidCallback? onNavigate;
@@ -55,212 +62,293 @@ class Sidebar extends StatefulWidget {
 }
 
 class _SidebarState extends State<Sidebar> {
-  final _expanded = <String>{};
+  final _collapsed = <String>{};
+  final _expandedAccounts = <String>{};
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final c = MacColors.of(context);
+    final multi = state.sessions.length > 1;
 
-    Widget item({
-      required Widget leading,
+    Widget row({
+      required IconData icon,
       required String label,
       required bool selected,
       required VoidCallback onTap,
+      Color? iconColor,
       int count = 0,
-      double indent = 0,
-      Widget? trailing,
-    }) {
-      return Padding(
-        padding: EdgeInsets.only(left: 8 + indent, right: 8, top: 1, bottom: 1),
-        child: Material(
-          color: selected ? scheme.secondaryContainer : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () {
-              onTap();
-              widget.onNavigate?.call();
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              child: Row(children: [
-                SizedBox(width: 18, child: Center(child: leading)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(label,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(fontWeight: selected ? FontWeight.w600 : FontWeight.normal)),
-                ),
-                if (count > 0)
-                  Text('$count', style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-                ?trailing,
-              ]),
-            ),
-          ),
-        ),
-      );
-    }
-
-    Icon icon(IconData i, [Color? c]) => Icon(i, size: 18, color: c ?? scheme.onSurfaceVariant);
-    Widget dot(Color c, [double size = 10]) =>
-        Container(width: size, height: size, decoration: BoxDecoration(color: c, shape: BoxShape.circle));
-
-    Widget header(String text, {Widget? trailing}) => Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 12, 4),
-          child: Row(children: [
-            Expanded(
-              child: Text(text.toUpperCase(),
-                  style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 0.8, color: scheme.onSurfaceVariant)),
-            ),
-            ?trailing,
-          ]),
+    }) =>
+        _SidebarRow(
+          icon: icon,
+          label: label,
+          selected: selected,
+          iconColor: iconColor ?? c.accent,
+          count: count,
+          onTap: () {
+            onTap();
+            widget.onNavigate?.call();
+          },
         );
 
-    final usedCategories = <MailCategory>{
-      for (final m in state.allInboxMessages)
-        if (state.triageOf(m) case final t?) t.category,
-    };
-    final multi = state.sessions.length > 1;
+    bool open(String key) => !_collapsed.contains(key);
+    void toggle(String key) => setState(() => _collapsed.contains(key) ? _collapsed.remove(key) : _collapsed.add(key));
 
-    return Container(
-      color: scheme.surfaceContainerLow,
-      child: Column(children: [
-        Expanded(
-          child: ListView(padding: const EdgeInsets.only(top: 8, bottom: 12), children: [
-            item(
-              leading: icon(Icons.all_inbox_rounded, scheme.primary),
-              label: multi ? 'All Inboxes' : 'Inbox',
-              selected: state.view == const MailView.allInboxes(),
-              count: state.unreadFor(const MailView.allInboxes()),
-              onTap: () => state.setView(const MailView.allInboxes()),
+    final list = ListView(
+      padding: EdgeInsets.only(top: useMacWindow ? kToolbarHeight52 : 8, bottom: 12),
+      children: [
+        _SidebarHeader(text: 'Favorites', open: open('fav'), onToggle: () => toggle('fav')),
+        if (open('fav')) ...[
+          row(
+            icon: CupertinoIcons.tray,
+            label: multi ? 'All Inboxes' : 'Inbox',
+            selected: state.view == const MailView.allInboxes(),
+            count: state.unreadFor(const MailView.allInboxes()),
+            onTap: () => state.setView(const MailView.allInboxes()),
+          ),
+          if (state.userData.vips.isNotEmpty)
+            row(
+              icon: CupertinoIcons.star,
+              label: 'VIPs',
+              selected: state.view == const MailView.vip(),
+              count: state.unreadFor(const MailView.vip()),
+              onTap: () => state.setView(const MailView.vip()),
             ),
-            if (state.userData.vips.isNotEmpty)
-              item(
-                leading: icon(Icons.star_rounded, const Color(0xFFFFB224)),
-                label: 'VIPs',
-                selected: state.view == const MailView.vip(),
-                count: state.unreadFor(const MailView.vip()),
-                onTap: () => state.setView(const MailView.vip()),
-              ),
-            if (state.userData.snoozes.isNotEmpty)
-              item(
-                leading: icon(Icons.alarm),
-                label: 'Reminders',
-                selected: state.view == const MailView.snoozed(),
-                count: state.unreadFor(const MailView.snoozed()),
-                onTap: () => state.setView(const MailView.snoozed()),
-              ),
-            if (state.userData.scheduled.isNotEmpty)
-              item(
-                leading: icon(Icons.schedule_send),
-                label: 'Scheduled',
-                selected: state.view == const MailView.scheduled(),
-                count: state.unreadFor(const MailView.scheduled()),
-                onTap: () => state.setView(const MailView.scheduled()),
-              ),
-            if (state.userData.followUps.isNotEmpty)
-              item(
-                leading: icon(Icons.notification_important_outlined, state.dueFollowUps.isEmpty ? null : scheme.primary),
-                label: 'Follow up',
-                selected: state.view == const MailView.followUp(),
-                count: state.unreadFor(const MailView.followUp()),
-                onTap: () => state.setView(const MailView.followUp()),
-              ),
-            if (state.aiReady) ...[
-              header('Smart inbox',
-                  trailing: state.sorting
-                      ? Text('Sorting ${state.sortDone}/${state.sortTotal}', style: theme.textTheme.labelSmall)
-                      : IconButton(
-                          icon: const Icon(Icons.auto_awesome, size: 15),
-                          visualDensity: VisualDensity.compact,
-                          tooltip: 'Re-sort all inboxes with AI',
-                          onPressed: () => state.sortInboxes(force: true),
-                        )),
-              item(
-                leading: icon(Icons.priority_high_rounded, const Color(0xFFE5484D)),
-                label: 'Priority',
-                selected: state.view == const MailView.priority(),
-                count: state.unreadFor(const MailView.priority()),
-                onTap: () => state.setView(const MailView.priority()),
-              ),
-              item(
-                leading: icon(Icons.reply_rounded, scheme.primary),
-                label: 'Needs reply',
-                selected: state.view == const MailView.needsReply(),
-                count: state.unreadFor(const MailView.needsReply()),
-                onTap: () => state.setView(const MailView.needsReply()),
-              ),
-              for (final c in MailCategory.values)
-                if (usedCategories.contains(c))
-                  item(
-                    leading: dot(categoryColor(c)),
-                    label: c.label,
-                    selected: state.view == MailView.category(c),
-                    count: state.unreadFor(MailView.category(c)),
-                    onTap: () => state.setView(MailView.category(c)),
+          row(
+            icon: CupertinoIcons.flag,
+            iconColor: const Color(0xFFFF9500),
+            label: 'Flagged',
+            selected: state.view == const MailView.flagged(),
+            count: state.unreadFor(const MailView.flagged()),
+            onTap: () => state.setView(const MailView.flagged()),
+          ),
+        ],
+        _SidebarHeader(
+          text: 'Smart Mailboxes',
+          open: open('smart'),
+          onToggle: () => toggle('smart'),
+          trailing: state.sorting
+              ? Text('Sorting ${state.sortDone}/${state.sortTotal}', style: TextStyle(fontSize: 10, color: c.secondaryLabel))
+              : null,
+        ),
+        if (open('smart')) ...[
+          if (state.aiReady) ...[
+            row(
+              icon: CupertinoIcons.exclamationmark_circle,
+              label: 'Priority',
+              selected: state.view == const MailView.priority(),
+              count: state.unreadFor(const MailView.priority()),
+              onTap: () => state.setView(const MailView.priority()),
+            ),
+            row(
+              icon: CupertinoIcons.arrowshape_turn_up_left,
+              label: 'Needs Reply',
+              selected: state.view == const MailView.needsReply(),
+              count: state.unreadFor(const MailView.needsReply()),
+              onTap: () => state.setView(const MailView.needsReply()),
+            ),
+          ],
+          if (state.userData.snoozes.isNotEmpty)
+            row(
+              icon: CupertinoIcons.alarm,
+              label: 'Reminders',
+              selected: state.view == const MailView.snoozed(),
+              count: state.unreadFor(const MailView.snoozed()),
+              onTap: () => state.setView(const MailView.snoozed()),
+            ),
+          if (state.userData.scheduled.isNotEmpty)
+            row(
+              icon: CupertinoIcons.clock,
+              label: 'Send Later',
+              selected: state.view == const MailView.scheduled(),
+              count: state.unreadFor(const MailView.scheduled()),
+              onTap: () => state.setView(const MailView.scheduled()),
+            ),
+          if (state.userData.followUps.isNotEmpty)
+            row(
+              icon: CupertinoIcons.bell,
+              label: 'Follow Up',
+              selected: state.view == const MailView.followUp(),
+              count: state.unreadFor(const MailView.followUp()),
+              onTap: () => state.setView(const MailView.followUp()),
+            ),
+        ],
+        for (final s in state.sessions) ...[
+          _SidebarHeader(
+            text: s.config.email,
+            open: !multi || _expandedAccounts.contains(s.id),
+            onToggle: () => setState(() =>
+                _expandedAccounts.contains(s.id) ? _expandedAccounts.remove(s.id) : _expandedAccounts.add(s.id)),
+            trailing: switch (s.status) {
+              ConnectionStatus.connecting =>
+                const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.2)),
+              ConnectionStatus.failed => Tooltip(
+                  message: '${s.error ?? 'Not connected'}\nClick to retry.',
+                  child: InkWell(
+                    onTap: () => state.reconnect(s),
+                    child: const Icon(CupertinoIcons.exclamationmark_triangle, size: 13, color: Color(0xFFFF9500)),
                   ),
-            ],
-            header('Accounts',
-                trailing: IconButton(
-                  icon: const Icon(Icons.add, size: 16),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Add account',
-                  onPressed: () => Navigator.of(context)
-                      .push(MaterialPageRoute<void>(builder: (_) => const AccountSetupPage())),
-                )),
-            for (final s in state.sessions) ...[
-              item(
-                leading: dot(accountColor(state.indexOf(s))),
-                label: s.config.email,
-                selected: false,
-                count: _expanded.contains(s.id) ? 0 : s.inboxMessages.where((m) => !m.isSeen).length,
-                onTap: () => setState(() => _expanded.contains(s.id) ? _expanded.remove(s.id) : _expanded.add(s.id)),
-                trailing: Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: switch (s.status) {
-                    ConnectionStatus.connecting => const SizedBox(
-                        width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)),
-                    ConnectionStatus.failed => Tooltip(
-                        message: '${s.error ?? 'Not connected'}\nClick to retry.',
-                        child: InkWell(
-                          onTap: () => state.reconnect(s),
-                          child: Icon(Icons.error_outline, size: 16, color: scheme.error),
-                        ),
-                      ),
-                    _ => Icon(_expanded.contains(s.id) ? Icons.expand_less : Icons.expand_more, size: 16),
-                  },
                 ),
+              _ => null,
+            },
+          ),
+          if (!multi || _expandedAccounts.contains(s.id))
+            for (final b in s.mailboxes)
+              row(
+                icon: mailboxIcon(b),
+                label: b.isInbox ? 'Inbox' : b.name,
+                selected: state.view == MailView.folder(s.id, b.path),
+                count: b.isInbox ? state.unreadFor(MailView.folder(s.id, b.path)) : 0,
+                onTap: () => state.openFolder(s, b),
               ),
-              if (_expanded.contains(s.id))
-                for (final b in s.mailboxes)
-                  item(
-                    indent: 16,
-                    leading: icon(mailboxIcon(b)),
-                    label: b.isInbox ? 'Inbox' : b.name,
-                    selected: state.view == MailView.folder(s.id, b.path),
-                    count: b.isInbox ? s.inboxMessages.where((m) => !m.isSeen).length : 0,
-                    onTap: () => state.openFolder(s, b),
-                  ),
-            ],
+        ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: c.secondaryLabel),
+              icon: const Icon(CupertinoIcons.add, size: 13),
+              label: const Text('Add Account'),
+              onPressed: () =>
+                  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AccountSetupPage())),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final body = Column(children: [
+      Expanded(child: list),
+      if (widget.onSettings != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+          child: Row(children: [
+            ToolButton(icon: CupertinoIcons.gear, tooltip: 'Settings (⌘,)', onPressed: widget.onSettings),
+            const Spacer(),
+            if (state.indexing)
+              Text('Indexing…', style: TextStyle(fontSize: 10, color: c.tertiaryLabel)),
           ]),
         ),
-        if (state.aiError != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
+      if (state.aiError != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 6, 8, 10),
+          child: Row(children: [
+            const Icon(CupertinoIcons.exclamationmark_triangle, size: 13, color: Color(0xFFFF9500)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text('AI offline: ${state.aiError}',
+                  style: TextStyle(fontSize: 11, color: c.secondaryLabel), maxLines: 3, overflow: TextOverflow.ellipsis),
+            ),
+            ToolButton(icon: CupertinoIcons.arrow_clockwise, tooltip: 'Retry', size: 13, onPressed: state.refreshAi),
+          ]),
+        ),
+    ]);
+
+    if (useMacWindow) {
+      return TransparentMacOSSidebar(child: Material(type: MaterialType.transparency, child: body));
+    }
+    return Material(color: c.sidebar, child: body);
+  }
+}
+
+class _SidebarHeader extends StatefulWidget {
+  const _SidebarHeader({required this.text, required this.open, required this.onToggle, this.trailing});
+  final String text;
+  final bool open;
+  final VoidCallback onToggle;
+  final Widget? trailing;
+
+  @override
+  State<_SidebarHeader> createState() => _SidebarHeaderState();
+}
+
+class _SidebarHeaderState extends State<_SidebarHeader> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MacColors.of(context);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onToggle,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 12, 12, 4),
+          child: Row(children: [
+            Expanded(
+              child: Text(widget.text,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: c.secondaryLabel)),
+            ),
+            ?widget.trailing,
+            // Like Finder and Mail: the disclosure chevron appears on hover.
+            AnimatedOpacity(
+              opacity: _hover ? 1 : 0,
+              duration: const Duration(milliseconds: 120),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Icon(widget.open ? CupertinoIcons.chevron_down : CupertinoIcons.chevron_right,
+                    size: 11, color: c.secondaryLabel),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarRow extends StatelessWidget {
+  const _SidebarRow({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.iconColor,
+    this.count = 0,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final Color iconColor;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MacColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Material(
+        color: selected ? c.sidebarSelection : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          hoverColor: Colors.transparent,
+          onTap: onTap,
+          child: SizedBox(
+            height: 28,
             child: Row(children: [
-              Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error),
+              const SizedBox(width: 8),
+              Icon(icon, size: 16, color: iconColor),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('AI offline: ${state.aiError}',
-                    style: theme.textTheme.labelSmall, maxLines: 3, overflow: TextOverflow.ellipsis),
+                child: Text(label, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: c.label)),
               ),
-              IconButton(icon: const Icon(Icons.refresh, size: 16), tooltip: 'Retry', onPressed: state.refreshAi),
+              if (count > 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Text('$count', style: TextStyle(fontSize: 12, color: c.secondaryLabel)),
+                ),
+              const SizedBox(width: 8),
             ]),
           ),
-      ]),
+        ),
+      ),
     );
   }
 }
@@ -275,14 +363,12 @@ class AccountBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = accountColor(index);
-    final label = config.email;
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
       const SizedBox(width: 4),
       Flexible(
-        child: Text(label,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 10.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        child: Text(config.email,
+            overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: MacColors.of(context).secondaryLabel)),
       ),
     ]);
   }
