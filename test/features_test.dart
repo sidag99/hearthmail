@@ -1,11 +1,11 @@
 import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumen_mail/models/email_content.dart';
-import 'package:lumen_mail/services/ai/email_ai.dart';
-import 'package:lumen_mail/services/email_html.dart';
-import 'package:lumen_mail/services/mail_service.dart';
-import 'package:lumen_mail/services/user_data.dart';
-import 'package:lumen_mail/services/vector_index.dart';
+import 'package:hearthmail/models/email_content.dart';
+import 'package:hearthmail/services/ai/email_ai.dart';
+import 'package:hearthmail/services/email_html.dart';
+import 'package:hearthmail/services/mail_service.dart';
+import 'package:hearthmail/services/user_data.dart';
+import 'package:hearthmail/services/vector_index.dart';
 
 MimeMessage msg(String headers, [String body = 'Hello']) =>
     MimeMessage.parseFromText('${headers.trim()}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n$body\r\n');

@@ -359,7 +359,7 @@ class _ComposePageState extends State<ComposePage> {
           SimpleDialogOption(onPressed: () => Navigator.pop(c, 'custom'), child: const Text('Pick date & time…')),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-            child: Text('Lumen Mail sends it at that time if it is open on this computer (or as soon as it is opened).',
+            child: Text('Hearthmail sends it at that time if it is open on this computer (or as soon as it is opened).',
                 style: Theme.of(c).textTheme.bodySmall),
           ),
         ],

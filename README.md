@@ -1,4 +1,4 @@
-# Lumen Mail
+# Hearthmail
 
 An email app with a private AI assistant. All AI runs locally through
 [Ollama](https://ollama.com); no email content leaves your computer.
@@ -48,7 +48,7 @@ flutter run -d macos
 ```
 
 For a standalone app: `flutter build macos`. The app is written to
-`build/macos/Build/Products/Release/Lumen Mail.app`.
+`build/macos/Build/Products/Release/Hearthmail.app`.
 
 ## Accounts
 

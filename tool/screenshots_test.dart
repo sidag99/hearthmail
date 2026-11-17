@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 // ignore_for_file: invalid_use_of_visible_for_testing_member
 // Renders the real app screens with sample mail and canned AI output, and
 // saves them as PNGs in screenshots/. No mail account or Ollama needed.
@@ -9,16 +10,16 @@ import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumen_mail/main.dart';
-import 'package:lumen_mail/models/account_config.dart';
-import 'package:lumen_mail/models/triage.dart';
-import 'package:lumen_mail/services/ai/ai_provider.dart';
-import 'package:lumen_mail/services/ai/email_ai.dart';
-import 'package:lumen_mail/services/mail_service.dart';
-import 'package:lumen_mail/services/settings_store.dart';
-import 'package:lumen_mail/state/app_state.dart';
-import 'package:lumen_mail/ui/account_setup_page.dart';
-import 'package:lumen_mail/ui/compose_page.dart';
+import 'package:hearthmail/main.dart';
+import 'package:hearthmail/models/account_config.dart';
+import 'package:hearthmail/models/triage.dart';
+import 'package:hearthmail/services/ai/ai_provider.dart';
+import 'package:hearthmail/services/ai/email_ai.dart';
+import 'package:hearthmail/services/mail_service.dart';
+import 'package:hearthmail/services/settings_store.dart';
+import 'package:hearthmail/state/app_state.dart';
+import 'package:hearthmail/ui/account_setup_page.dart';
+import 'package:hearthmail/ui/compose_page.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -108,7 +109,7 @@ Future<AppState> sampleState() async {
     mail('The Verge', 'newsletter@theverge.com', 'Verge Daily: The best gadgets of 2026',
         'Today: our picks for the best gadgets of the year, a review of the new Pixel, and why everyone is talking about local AI.',
         ago: const Duration(days: 2, hours: 5)),
-    mail('GitHub', 'noreply@github.com', '[lumen-mail] CI passed on main',
+    mail('GitHub', 'noreply@github.com', '[hearthmail] CI passed on main',
         'All checks have passed for commit 4f2a9c1.', ago: const Duration(days: 3)),
   ];
   Triage t(MailCategory c, MailPriority p, [bool reply = false]) =>
@@ -192,10 +193,10 @@ Widget app(AppState state, {Widget? home, Brightness brightness = Brightness.lig
       child: RepaintBoundary(
         key: key,
         child: home == null
-            ? const LumenMailApp()
+            ? const HearthmailApp()
             : MaterialApp(
                 debugShowCheckedModeBanner: false,
-                theme: LumenMailApp.buildTheme(brightness),
+                theme: HearthmailApp.buildTheme(brightness),
                 home: home,
               ),
       ),
@@ -219,6 +220,22 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     await snap(tester, '1_home');
+  });
+
+  testWidgets('right-click menu on an email', (tester) async {
+    size(tester, 1440, 900);
+    final state = await sampleState();
+    await tester.pumpWidget(app(state));
+    final tile = find.text('Prof. Elena Ruiz');
+    await tester.tap(tile, buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    for (final label in ['Reply', 'Forward', 'Remind me…', 'Move to Junk', 'Add sender to VIPs', 'Block sender…']) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+    await snap(tester, '8_context_menu');
+    await tester.tap(find.text('Add sender to VIPs'));
+    await tester.pumpAndSettle();
+    expect(state.userData.vips, contains('eruiz@cs.university.edu'));
   });
 
   testWidgets('home in dark mode, priority view', (tester) async {

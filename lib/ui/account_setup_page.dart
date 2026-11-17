@@ -351,7 +351,7 @@ class _AccountSetupPageState extends State<AccountSetupPage> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Lumen Mail has no company server, so $name needs to know about your own copy of the app. '
+          'Hearthmail has no company server, so $name needs to know about your own copy of the app. '
           'This free registration takes about 10 minutes and is only needed once for all your $name accounts. '
           'Full instructions are in OAUTH_SETUP.md.',
           style: theme.textTheme.bodySmall,
@@ -420,7 +420,7 @@ class _AccountSetupPageState extends State<AccountSetupPage> {
       Text('Sign in with $name', style: theme.textTheme.titleMedium),
       const SizedBox(height: 6),
       Text(
-        'Your browser will open to $name\'s sign-in page. Lumen Mail never sees your password; '
+        'Your browser will open to $name\'s sign-in page. Hearthmail never sees your password; '
         '$name gives it a key that only works for email, stored in your Mac\'s Keychain.',
         style: theme.textTheme.bodySmall,
       ),
@@ -501,7 +501,7 @@ class _AccountSetupPageState extends State<AccountSetupPage> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Welcome to Lumen Mail',
+                      'Welcome to Hearthmail',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.headlineSmall,
                     ),

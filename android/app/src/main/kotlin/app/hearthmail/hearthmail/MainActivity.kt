@@ -1,4 +1,4 @@
-package app.lumenmail.lumen_mail
+package app.hearthmail.hearthmail
 
 import io.flutter.embedding.android.FlutterActivity
 

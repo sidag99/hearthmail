@@ -870,7 +870,7 @@ class AppState extends ChangeNotifier {
     ));
     userData.scheduled.sort((a, b) => a.sendAt.compareTo(b.sendAt));
     await userData.save();
-    toast('Scheduled. It will be sent while Lumen Mail is open on this computer.');
+    toast('Scheduled. It will be sent while Hearthmail is open on this computer.');
     notifyListeners();
   }
 

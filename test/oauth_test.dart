@@ -5,8 +5,8 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:lumen_mail/models/account_config.dart';
-import 'package:lumen_mail/services/oauth.dart';
+import 'package:hearthmail/models/account_config.dart';
+import 'package:hearthmail/services/oauth.dart';
 
 String _jwt(Map<String, Object> claims) =>
     'x.${base64Url.encode(utf8.encode(jsonEncode(claims))).replaceAll('=', '')}.sig';

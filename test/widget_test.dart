@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumen_mail/models/search_plan.dart';
-import 'package:lumen_mail/services/ai/email_ai.dart';
-import 'package:lumen_mail/services/html_text.dart';
-import 'package:lumen_mail/services/mail_service.dart';
+import 'package:hearthmail/models/search_plan.dart';
+import 'package:hearthmail/services/ai/email_ai.dart';
+import 'package:hearthmail/services/html_text.dart';
+import 'package:hearthmail/services/mail_service.dart';
 
 void main() {
   group('SearchPlan', () {

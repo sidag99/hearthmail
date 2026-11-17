@@ -1,6 +1,6 @@
 # Setting up "Sign in with Google / Microsoft"
 
-Lumen Mail has no company behind it to register with Google or Microsoft, so
+Hearthmail has no company behind it to register with Google or Microsoft, so
 you register your own copy once. It's free. Each registration covers **all**
 your accounts with that provider, so you do Google once and Microsoft once.
 
@@ -21,20 +21,20 @@ When to use which:
 1. Open <https://console.cloud.google.com> and sign in with any Google account
    (your personal one is fine).
 2. Click the project picker at the top → **New project** → name it
-   "Lumen Mail" → **Create**, then select it.
+   "Hearthmail" → **Create**, then select it.
 3. **APIs & Services → Library** → search "Gmail API" → **Enable**.
 4. **APIs & Services → OAuth consent screen** (also called "Google Auth
    Platform"):
    - User type / Audience: **External**
-   - App name: `Lumen Mail`, support email: your email, developer contact:
+   - App name: `Hearthmail`, support email: your email, developer contact:
      your email → Save.
    - **Audience → Test users → Add users**: add **every Google address you
      will sign in with** (personal and university). While the app is in
      "Testing" mode, only these addresses can sign in. That's fine for
      personal use.
 5. **APIs & Services → Credentials → Create credentials → OAuth client ID**
-   - Application type: **Desktop app**, name: `Lumen Mail` → **Create**.
-6. Copy the **Client ID** and **Client secret** into Lumen Mail (Add account →
+   - Application type: **Desktop app**, name: `Hearthmail` → **Create**.
+6. Copy the **Client ID** and **Client secret** into Hearthmail (Add account →
    Sign in with Google, or Settings → Sign-in apps).
 
 For desktop apps, Google's "client secret" isn't really secret, but keep it
@@ -57,7 +57,7 @@ to yourself anyway.
    university account here often fails because universities restrict app
    registrations.
 2. **Applications → App registrations → New registration**
-   - Name: `Lumen Mail`
+   - Name: `Hearthmail`
    - Supported account types: **Accounts in any organizational directory and
      personal Microsoft accounts**
    - Redirect URI: platform **Public client/native (mobile & desktop)**,
@@ -70,7 +70,7 @@ to yourself anyway.
    automatically.)
 4. **Authentication** → under *Advanced settings*, set **Allow public client
    flows** to **Yes** → Save.
-5. Copy the **Application (client) ID** from **Overview** into Lumen Mail.
+5. Copy the **Application (client) ID** from **Overview** into Hearthmail.
    No secret is needed.
 
 **Good to know**
@@ -85,9 +85,9 @@ to yourself anyway.
 
 ## Privacy
 
-Sign-in happens in your own browser, so Lumen Mail never sees your password.
+Sign-in happens in your own browser, so Hearthmail never sees your password.
 Google or Microsoft hands back a key that only allows email access. It's
 stored in your Mac's Keychain and refreshed automatically. Removing an account
-in Lumen Mail deletes its key. To revoke access entirely, use
+in Hearthmail deletes its key. To revoke access entirely, use
 <https://myaccount.google.com/permissions> or
 <https://account.microsoft.com/privacy/app-access>.

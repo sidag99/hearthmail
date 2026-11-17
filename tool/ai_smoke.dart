@@ -2,9 +2,9 @@
 // Run: dart run tool/ai_smoke.dart [model]
 import 'dart:io';
 
-import 'package:lumen_mail/models/email_content.dart';
-import 'package:lumen_mail/services/ai/email_ai.dart';
-import 'package:lumen_mail/services/ai/ollama_provider.dart';
+import 'package:hearthmail/models/email_content.dart';
+import 'package:hearthmail/services/ai/email_ai.dart';
+import 'package:hearthmail/services/ai/ollama_provider.dart';
 
 final emails = [
   EmailContent(

@@ -163,7 +163,7 @@ class _HomePageState extends State<HomePage> {
             toolbarHeight: 48,
             titleSpacing: 16,
             title: Text(
-              selected == null || wide ? 'Lumen Mail' : MailService.subjectOf(selected),
+              selected == null || wide ? 'Hearthmail' : MailService.subjectOf(selected),
               style: Theme.of(context).textTheme.titleMedium,
               overflow: TextOverflow.ellipsis,
             ),

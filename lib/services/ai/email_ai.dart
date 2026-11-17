@@ -448,9 +448,9 @@ class EmailEvent {
     return [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//Lumen Mail//EN',
+      'PRODID:-//Hearthmail//EN',
       'BEGIN:VEVENT',
-      'UID:${now.microsecondsSinceEpoch}@lumen-mail',
+      'UID:${now.microsecondsSinceEpoch}@hearthmail',
       'DTSTAMP:${dt(now)}Z',
       if (allDay) ...['DTSTART;VALUE=DATE:${date(start)}', 'DTEND;VALUE=DATE:${date(e)}']
       else ...['DTSTART:${dt(start)}', 'DTEND:${dt(e)}'],

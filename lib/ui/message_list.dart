@@ -8,6 +8,7 @@ import '../services/mail_service.dart';
 import '../services/user_data.dart';
 import '../state/app_state.dart';
 import 'compose_page.dart';
+import 'message_view.dart' show showMessageMenu;
 import 'sidebar.dart';
 import 'widgets/ai_widgets.dart';
 
@@ -181,7 +182,12 @@ class MessageListPane extends StatelessWidget {
               onOpen?.call();
             },
           );
-          if (!swipe) return tile;
+          final withMenu = GestureDetector(
+            onSecondaryTapDown: (d) => showMessageMenu(context, m, d.globalPosition),
+            onLongPressStart: swipe ? (d) => showMessageMenu(context, m, d.globalPosition) : null,
+            child: tile,
+          );
+          if (!swipe) return withMenu;
           // Phone-style swipes: right to archive, left to delete.
           return Dismissible(
             key: ObjectKey(m),
@@ -199,7 +205,7 @@ class MessageListPane extends StatelessWidget {
             ),
             onDismissed: (dir) =>
                 dir == DismissDirection.startToEnd ? state.archiveMessage(m) : state.deleteMessage(m),
-            child: tile,
+            child: withMenu,
           );
         },
       ),

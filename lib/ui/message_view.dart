@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:enough_mail/enough_mail.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -360,7 +361,7 @@ class _MessageBodyState extends State<_MessageBody> {
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Unsubscribe from ${MailService.senderName(widget.message)}?'),
-        content: const Text('Lumen Mail will ask the sender to stop sending you these emails.'),
+        content: const Text('Hearthmail will ask the sender to stop sending you these emails.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Unsubscribe')),
@@ -709,3 +710,115 @@ class _AttachmentChipState extends State<_AttachmentChip> {
 
 /// For the event dialog and tests.
 typedef EventFinder = Future<EmailEvent?> Function();
+
+/// The right-click (or long-press) menu for an email, like Apple Mail's.
+Future<void> showMessageMenu(BuildContext context, MimeMessage m, Offset at) async {
+  final state = context.read<AppState>();
+  final sender = MailService.senderOf(m)?.email;
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+  PopupMenuItem<String> item(String value, IconData icon, String label) => PopupMenuItem(
+        value: value,
+        height: 36,
+        child: Row(children: [Icon(icon, size: 18), const SizedBox(width: 12), Text(label)]),
+      );
+  final choice = await showMenu<String>(
+    context: context,
+    position: RelativeRect.fromRect(at & const Size(1, 1), Offset.zero & overlay.size),
+    items: [
+      item('reply', Icons.reply, 'Reply'),
+      item('replyAll', Icons.reply_all, 'Reply all'),
+      item('forward', Icons.forward, 'Forward'),
+      const PopupMenuDivider(),
+      item('read', m.isSeen ? Icons.mark_email_unread_outlined : Icons.drafts_outlined,
+          m.isSeen ? 'Mark as unread' : 'Mark as read'),
+      item('flag', m.isFlagged ? Icons.outlined_flag : Icons.flag_outlined, m.isFlagged ? 'Unflag' : 'Flag'),
+      item('remind', Icons.alarm, 'Remind me…'),
+      const PopupMenuDivider(),
+      item('archive', Icons.archive_outlined, 'Archive'),
+      item('move', Icons.drive_file_move_outline, 'Move to…'),
+      item('junk', Icons.report_gmailerrorred, 'Move to Junk'),
+      item('delete', Icons.delete_outline, 'Delete'),
+      const PopupMenuDivider(),
+      if (sender != null)
+        item('vip', state.userData.isVip(sender) ? Icons.star_rounded : Icons.star_outline_rounded,
+            state.userData.isVip(sender) ? 'Remove from VIPs' : 'Add sender to VIPs'),
+      item('mute', Icons.notifications_off_outlined, state.isMuted(m) ? 'Unmute conversation' : 'Mute conversation'),
+      if (sender != null) item('copy', Icons.copy, 'Copy sender address'),
+      if (sender != null) item('block', Icons.block, 'Block sender…'),
+    ],
+  );
+  if (choice == null || !context.mounted) return;
+  switch (choice) {
+    case 'reply':
+      openReply(context, m);
+    case 'replyAll':
+      openReply(context, m, replyAll: true);
+    case 'forward':
+      openForward(context, m);
+    case 'read':
+      await state.toggleRead(m);
+    case 'flag':
+      await state.toggleFlag(m);
+    case 'remind':
+      final picked = await showDialog<Object>(
+        context: context,
+        builder: (c) => SimpleDialog(
+          title: const Text('Remind me'),
+          children: [
+            for (final (label, time) in snoozeChoices())
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(c, time),
+                child: Text('$label  ·  ${DateFormat('E HH:mm').format(time)}'),
+              ),
+            SimpleDialogOption(onPressed: () => Navigator.pop(c, 'custom'), child: const Text('Pick date & time…')),
+          ],
+        ),
+      );
+      if (!context.mounted) return;
+      final when = picked is DateTime ? picked : (picked == 'custom' ? await pickDateTime(context, help: 'Remind me on') : null);
+      if (when != null) await state.snooze(m, when);
+    case 'archive':
+      await state.archiveMessage(m);
+    case 'move':
+      final owner = state.sessionOf(m);
+      final here = state.mailboxOf(m);
+      final target = await showDialog<Mailbox>(
+        context: context,
+        builder: (c) => SimpleDialog(
+          title: const Text('Move to'),
+          children: [
+            for (final b in (owner?.mailboxes ?? const <Mailbox>[]).where((b) => b.path != here?.path))
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(c, b),
+                child: Row(children: [Icon(mailboxIcon(b), size: 18), const SizedBox(width: 10), Text(b.isInbox ? 'Inbox' : b.name)]),
+              ),
+          ],
+        ),
+      );
+      if (target != null) await state.moveMessage(m, target);
+    case 'junk':
+      await state.junkMessage(m);
+    case 'delete':
+      await state.deleteMessage(m);
+    case 'vip':
+      await state.toggleVip(sender!);
+    case 'mute':
+      await state.muteThread(m);
+    case 'copy':
+      await Clipboard.setData(ClipboardData(text: sender!));
+      state.toast('Copied $sender');
+    case 'block':
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text('Block $sender?'),
+          content: const Text('Their emails will go straight to Junk on this computer. You can unblock them in Settings.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Block')),
+          ],
+        ),
+      );
+      if (ok == true) await state.blockSender(sender!);
+  }
+}

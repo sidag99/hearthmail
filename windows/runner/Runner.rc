@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "app.lumenmail" "\0"
-            VALUE "FileDescription", "lumen_mail" "\0"
+            VALUE "CompanyName", "app.hearthmail" "\0"
+            VALUE "FileDescription", "hearthmail" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "lumen_mail" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 app.lumenmail. All rights reserved." "\0"
-            VALUE "OriginalFilename", "lumen_mail.exe" "\0"
-            VALUE "ProductName", "lumen_mail" "\0"
+            VALUE "InternalName", "hearthmail" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 app.hearthmail. All rights reserved." "\0"
+            VALUE "OriginalFilename", "hearthmail.exe" "\0"
+            VALUE "ProductName", "hearthmail" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

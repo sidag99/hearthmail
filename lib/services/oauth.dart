@@ -89,7 +89,7 @@ class OAuthClient {
       final ok = q['state'] == state && q.containsKey('code');
       req.response.headers.contentType = ContentType.html;
       req.response.write('<html><body style="font-family:-apple-system,sans-serif;text-align:center;padding-top:80px">'
-          '<h2>${ok ? 'Signed in to Lumen Mail' : 'Sign-in did not complete'}</h2>'
+          '<h2>${ok ? 'Signed in to Hearthmail' : 'Sign-in did not complete'}</h2>'
           '<p>You can close this tab and return to the app.</p></body></html>');
       await req.response.close();
       if (!done.isCompleted) done.complete(q);

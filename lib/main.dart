@@ -10,13 +10,13 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = await SettingsStore.open();
   final state = AppState(store);
-  runApp(ChangeNotifierProvider.value(value: state, child: const LumenMailApp()));
+  runApp(ChangeNotifierProvider.value(value: state, child: const HearthmailApp()));
   // Connect after the first frame so the window appears immediately.
   await state.init();
 }
 
-class LumenMailApp extends StatelessWidget {
-  const LumenMailApp({super.key});
+class HearthmailApp extends StatelessWidget {
+  const HearthmailApp({super.key});
 
   static ThemeData buildTheme(Brightness b) {
     final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF5B5BD6), brightness: b);
@@ -39,7 +39,7 @@ class LumenMailApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasAccount = context.select<AppState, bool>((s) => s.accounts.isNotEmpty);
     return MaterialApp(
-      title: 'Lumen Mail',
+      title: 'Hearthmail',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),

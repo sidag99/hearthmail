@@ -1,4 +1,4 @@
-# Lumen Mail vs Apple Mail and Gmail
+# Hearthmail vs Apple Mail and Gmail
 
 Status as of 17 Nov 2026. ✅ built · 🔜 possible, not built yet · ⚠️ possible with limits · ❌ not possible
 
