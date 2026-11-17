@@ -44,6 +44,29 @@ class AiException implements Exception {
   String toString() => message;
 }
 
+/// Rate limit, usage cap or quota reached (HTTP 429, "usage limit", ...).
+/// The UI can offer to retry with another engine.
+class AiLimitException extends AiException {
+  AiLimitException(super.message);
+}
+
+/// Missing/invalid key, not signed in, or the CLI is not installed.
+class AiAuthException extends AiException {
+  AiAuthException(super.message);
+}
+
+/// True when [text] looks like a usage-limit message from a CLI or API.
+bool looksLikeLimit(String text) => RegExp(
+        r'rate.?limit|usage limit|limit reached|quota|too many requests|\b429\b|overloaded|credit balance|out of credits',
+        caseSensitive: false)
+    .hasMatch(text);
+
+/// True when [text] looks like an authentication problem.
+bool looksLikeAuth(String text) => RegExp(
+        r'not logged in|log ?in|sign ?in|unauthori[sz]ed|invalid api key|authentication|\b401\b|please run /login',
+        caseSensitive: false)
+    .hasMatch(text);
+
 extension AiProviderHelpers on AiProvider {
   /// Runs a chat and returns the whole reply as one string.
   Future<String> complete(

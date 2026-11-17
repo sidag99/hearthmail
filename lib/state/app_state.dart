@@ -13,6 +13,7 @@ import '../models/search_plan.dart';
 import '../models/triage.dart';
 import '../services/ai/ai_provider.dart';
 import '../services/ai/email_ai.dart';
+import '../services/ai/engines.dart';
 import '../services/ai/ollama_provider.dart';
 import '../services/mail_service.dart';
 import '../services/oauth.dart';
@@ -20,6 +21,7 @@ import '../services/settings_store.dart';
 import '../services/triage_cache.dart';
 import '../services/user_data.dart';
 import '../services/vector_index.dart';
+import 'ai_engines.dart';
 
 /// What the message list is showing.
 enum ViewKind { allInboxes, folder, priority, needsReply, category, search, vip, snoozed, scheduled, followUp }
@@ -159,7 +161,14 @@ class AppState extends ChangeNotifier {
   EmailAi? get ai => _ai;
   bool get aiReady => _ai != null;
 
+  late final EngineHub engines = EngineHub(_store);
+
+  /// Why a chosen cloud/CLI engine is not being used (null when all fine).
+  /// In that case the job falls back to local Ollama.
+  String? engineError;
+
   Future<void> refreshAi() async {
+    await engines.load();
     _provider?.close();
     _provider = OllamaProvider(baseUrl: settings.ollamaUrl);
     try {
@@ -221,21 +230,120 @@ class AppState extends ChangeNotifier {
   }
 
   void _rebuildAi() {
-    final p = _provider;
+    final local = _provider;
     final name = settings.userName.isNotEmpty
         ? settings.userName
         : sessions.map((s) => s.config.displayName).firstWhere((n) => n.isNotEmpty, orElse: () => '');
-    _ai = (p == null || availableModels.isEmpty)
-        ? null
-        : EmailAi(
-            provider: p,
-            fastModel: settings.fastModel,
-            writingModel: settings.writingModel,
-            userName: name,
-            styleNotes: settings.styleNotes,
-            translationModel: translationModel,
-            embeddingModel: embeddingModel,
-          );
+    final errors = <String>[];
+
+    /// The cloud/CLI provider for a job, or null (use local) with an error noted.
+    ({AiProvider provider, String model})? cloud(String engine, String model, String job, {required bool writing}) {
+      if (!AiEngine.isCloud(engine)) return null;
+      final p = engines.provider(engine);
+      if (p == null) {
+        errors.add('${AiEngine.label(engine)} is selected for $job but not set up. ${engines.problem(engine) ?? ''} Using local AI instead.');
+        return null;
+      }
+      return (provider: p, model: model.isNotEmpty ? model : EngineHub.defaultModel(engine, writing: writing));
+    }
+
+    final assist = cloud(settings.assistEngine, settings.assistCloudModel, 'everything else', writing: false);
+    final writer = cloud(settings.writingEngine, settings.writingCloudModel, 'writing', writing: true);
+    engineError = errors.isEmpty ? null : errors.join(' ');
+
+    final localReady = local != null && availableModels.isNotEmpty;
+    if (local == null || (!localReady && assist == null && writer == null)) {
+      _ai = null;
+      return;
+    }
+    _ai = EmailAi(
+      provider: assist?.provider ?? local,
+      fastModel: assist?.model ?? settings.fastModel,
+      writingModel: settings.writingModel,
+      writer: writer?.provider,
+      writerModel: writer?.model ?? '',
+      local: local,
+      userName: name,
+      styleNotes: settings.styleNotes,
+      translationModel: translationModel,
+      embeddingModel: embeddingModel,
+    );
+  }
+
+  // ------------------------------------------------- engines and writing choice
+
+  /// Stores or clears an API key ([AiEngine.anthropicKey] / [AiEngine.openaiKey]).
+  Future<void> setApiKey(String keyName, String? value) async {
+    await engines.setKey(keyName, value);
+    _rebuildAi();
+    notifyListeners();
+  }
+
+  /// Loads the live model list of a cloud engine (throws [AiException]).
+  Future<void> refreshEngineModels(String engine) async {
+    await engines.refreshModels(engine);
+    notifyListeners();
+  }
+
+  /// Re-checks whether the Claude Code and Codex CLIs are installed.
+  Future<void> recheckClis() async {
+    await engines.refreshInstalled();
+    _rebuildAi();
+    notifyListeners();
+  }
+
+  /// Every usable way to run writing jobs, local models first.
+  List<WritingChoice> get writingChoices {
+    WritingChoice mk(String engine, String model) => WritingChoice(engine, model, EngineHub.label(engine, model));
+    return [
+      for (final m in availableModels.where(isChatModel)) mk(AiEngine.local, m),
+      if (engines.configured(AiEngine.claudeApi))
+        for (final m in engines.modelsFor(AiEngine.claudeApi)) mk(AiEngine.claudeApi, m),
+      if (engines.configured(AiEngine.openaiApi))
+        for (final m in engines.modelsFor(AiEngine.openaiApi)) mk(AiEngine.openaiApi, m),
+      if (engines.configured(AiEngine.claudeCli)) mk(AiEngine.claudeCli, _cliModel(AiEngine.claudeCli)),
+      if (engines.configured(AiEngine.codexCli)) mk(AiEngine.codexCli, _cliModel(AiEngine.codexCli)),
+    ];
+  }
+
+  String _cliModel(String engine) => settings.writingEngine == engine
+      ? settings.writingCloudModel
+      : EngineHub.defaultModel(engine, writing: true);
+
+  /// The writing engine and model in use right now (after fallbacks to local).
+  WritingChoice get currentWritingChoice {
+    final e = settings.writingEngine;
+    if (AiEngine.isCloud(e) && engines.configured(e)) {
+      final m = settings.writingCloudModel.isNotEmpty
+          ? settings.writingCloudModel
+          : EngineHub.defaultModel(e, writing: true);
+      return WritingChoice(e, m, EngineHub.label(e, m));
+    }
+    final m = settings.writingModel;
+    return WritingChoice(AiEngine.local, m, EngineHub.label(AiEngine.local, m));
+  }
+
+  /// Switches writing to [c] immediately and remembers it.
+  Future<void> setWritingChoice(WritingChoice c) async {
+    settings = c.engine == AiEngine.local
+        ? settings.copyWith(writingEngine: AiEngine.local, writingModel: c.model)
+        : settings.copyWith(writingEngine: c.engine, writingCloudModel: c.model);
+    await _store.saveSettings(settings);
+    _rebuildAi();
+    notifyListeners();
+  }
+
+  /// A choice to offer when [failed] errored (limit, auth, outage): local
+  /// first, otherwise another cloud engine. Null if nothing else is usable.
+  WritingChoice? fallbackFor(WritingChoice failed) {
+    final others = writingChoices.where((c) => c != failed).toList();
+    if (others.isEmpty) return null;
+    final localChoices = others.where((c) => !c.isCloud).toList();
+    if (localChoices.isNotEmpty) {
+      return localChoices.firstWhere((c) => c.model == settings.writingModel, orElse: () => localChoices.first);
+    }
+    // Prefer a different engine than the one that failed.
+    return others.firstWhere((c) => c.engine != failed.engine, orElse: () => others.first);
   }
 
   Future<void> updateSettings(AppSettings s) async {
@@ -1714,6 +1822,7 @@ class AppState extends ChangeNotifier {
       s.service?.disconnect();
     }
     _provider?.close();
+    engines.close();
     _toasts.close();
     super.dispose();
   }

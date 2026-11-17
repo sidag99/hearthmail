@@ -25,6 +25,10 @@ class AppSettings {
     this.myLanguage = 'English',
     this.undoSendSeconds = 10,
     this.indexDepth = 3000,
+    this.writingEngine = 'local',
+    this.assistEngine = 'local',
+    this.writingCloudModel = '',
+    this.assistCloudModel = '',
   });
 
   final String ollamaUrl;
@@ -60,6 +64,17 @@ class AppSettings {
   /// How many recent emails per account to index for semantic search.
   final int indexDepth;
 
+  /// Where writing jobs (drafts, rewrites, subjects, digests, outgoing
+  /// translation) run: local, claudeApi, openaiApi, claudeCli, codexCli.
+  final String writingEngine;
+
+  /// Where everything else (summaries, search, triage, ...) runs.
+  final String assistEngine;
+
+  /// Model for the chosen cloud engine ('' = engine default).
+  final String writingCloudModel;
+  final String assistCloudModel;
+
   AppSettings copyWith({
     String? ollamaUrl,
     String? fastModel,
@@ -77,6 +92,10 @@ class AppSettings {
     String? myLanguage,
     int? undoSendSeconds,
     int? indexDepth,
+    String? writingEngine,
+    String? assistEngine,
+    String? writingCloudModel,
+    String? assistCloudModel,
   }) =>
       AppSettings(
         ollamaUrl: ollamaUrl ?? this.ollamaUrl,
@@ -95,6 +114,10 @@ class AppSettings {
         myLanguage: myLanguage ?? this.myLanguage,
         undoSendSeconds: undoSendSeconds ?? this.undoSendSeconds,
         indexDepth: indexDepth ?? this.indexDepth,
+        writingEngine: writingEngine ?? this.writingEngine,
+        assistEngine: assistEngine ?? this.assistEngine,
+        writingCloudModel: writingCloudModel ?? this.writingCloudModel,
+        assistCloudModel: assistCloudModel ?? this.assistCloudModel,
       );
 
   Map<String, dynamic> toJson() => {
@@ -114,6 +137,10 @@ class AppSettings {
         'myLanguage': myLanguage,
         'undoSendSeconds': undoSendSeconds,
         'indexDepth': indexDepth,
+        'writingEngine': writingEngine,
+        'assistEngine': assistEngine,
+        'writingCloudModel': writingCloudModel,
+        'assistCloudModel': assistCloudModel,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -133,6 +160,10 @@ class AppSettings {
         myLanguage: j['myLanguage'] as String? ?? 'English',
         undoSendSeconds: j['undoSendSeconds'] as int? ?? 10,
         indexDepth: j['indexDepth'] as int? ?? 3000,
+        writingEngine: j['writingEngine'] as String? ?? 'local',
+        assistEngine: j['assistEngine'] as String? ?? 'local',
+        writingCloudModel: j['writingCloudModel'] as String? ?? '',
+        assistCloudModel: j['assistCloudModel'] as String? ?? '',
       );
 }
 
@@ -191,6 +222,12 @@ class SettingsStore {
     await _secure.delete(key: 'password.$accountId');
     await _secure.delete(key: 'oauth.$accountId');
   }
+
+  /// Generic secrets (API keys) in the keychain.
+  Future<String?> readSecret(String key) => _secure.read(key: key);
+  Future<void> writeSecret(String key, String value) =>
+      _secure.write(key: key, value: value);
+  Future<void> deleteSecret(String key) => _secure.delete(key: key);
 
   Future<OauthToken?> readToken(String accountId) async {
     final raw = await _secure.read(key: 'oauth.$accountId');
