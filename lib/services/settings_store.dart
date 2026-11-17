@@ -26,7 +26,11 @@ class AppSettings {
     this.undoSendSeconds = 10,
     this.indexDepth = 3000,
     this.notifications = true,
+    this.groupConversations = true,
   });
+
+  /// Show one row per conversation in message lists.
+  final bool groupConversations;
 
   final String ollamaUrl;
 
@@ -82,8 +86,10 @@ class AppSettings {
     int? undoSendSeconds,
     int? indexDepth,
     bool? notifications,
+    bool? groupConversations,
   }) =>
       AppSettings(
+        groupConversations: groupConversations ?? this.groupConversations,
         ollamaUrl: ollamaUrl ?? this.ollamaUrl,
         fastModel: fastModel ?? this.fastModel,
         writingModel: writingModel ?? this.writingModel,
@@ -121,6 +127,7 @@ class AppSettings {
         'undoSendSeconds': undoSendSeconds,
         'indexDepth': indexDepth,
         'notifications': notifications,
+        'groupConversations': groupConversations,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -141,6 +148,7 @@ class AppSettings {
         undoSendSeconds: j['undoSendSeconds'] as int? ?? 10,
         indexDepth: j['indexDepth'] as int? ?? 3000,
         notifications: j['notifications'] as bool? ?? true,
+        groupConversations: j['groupConversations'] as bool? ?? true,
       );
 }
 
