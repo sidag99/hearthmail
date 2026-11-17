@@ -103,3 +103,7 @@ tool/model_bench.dart    compares models on search, sorting, speed and translati
 flutter test                                  # unit tests
 dart run tool/ai_smoke.dart gemma4:12b-mlx    # live AI check (Ollama must be running)
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
