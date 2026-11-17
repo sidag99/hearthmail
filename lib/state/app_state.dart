@@ -14,6 +14,7 @@ import '../models/search_plan.dart';
 import '../models/triage.dart';
 import '../services/ai/ai_provider.dart';
 import '../services/ai/email_ai.dart';
+import '../services/apple_language.dart';
 import '../services/ai/engines.dart';
 import '../services/ai/ollama_provider.dart';
 import '../services/dock_badge.dart';
@@ -334,6 +335,10 @@ class AppState extends ChangeNotifier {
       styleNotes: settings.styleNotes,
       translationModel: translationModel,
       embeddingModel: embeddingModel,
+      fastDetect: AppleLanguage.available ? AppleLanguage.detect : null,
+      fastTranslate: AppleLanguage.available
+          ? (text, source, target) => AppleLanguage.translate(text, source: source, target: target)
+          : null,
     );
   }
 

@@ -35,8 +35,17 @@ class EmailAi {
     this.writer,
     this.writerModel = '',
     this.local,
+    this.fastDetect,
+    this.fastTranslate,
     DateTime Function()? clock,
   }) : _now = clock ?? DateTime.now;
+
+  /// Optional faster, non-AI language detection (Apple's on macOS).
+  final Future<String?> Function(String text)? fastDetect;
+
+  /// Optional faster translation for reading (Apple's on macOS); returns
+  /// null when unavailable so the model is used instead.
+  final Future<String?> Function(String text, String source, String target)? fastTranslate;
 
   /// A dedicated translation model (e.g. translategemma); empty = use the
   /// writing model.
@@ -339,6 +348,8 @@ class EmailAi {
   /// The language [text] is written in, e.g. "German", or null if unsure.
   /// Tries a fast offline guess first and only asks the model when needed.
   Future<String?> detectLanguage(String text) async {
+    final apple = await fastDetect?.call(text);
+    if (apple != null) return apple;
     final quick = Languages.guess(text);
     if (quick != null) return quick;
     final sample = text.length > 600 ? text.substring(0, 600) : text;
@@ -369,6 +380,17 @@ class EmailAi {
   Stream<String> translate(String text, String target, {String? source, bool forSending = false}) async* {
     var input = text.trim();
     if (input.length > 9000) input = '${input.substring(0, 9000)}\n[…]';
+    // Reading: Apple's on-device translation first when available (fast).
+    if (!forSending && fastTranslate != null) {
+      final from = source ?? await detectLanguage(input);
+      if (from != null) {
+        final quick = await fastTranslate!(input, from, target);
+        if (quick != null) {
+          yield quick;
+          return;
+        }
+      }
+    }
     // Reading translation stays on the local engine; sending uses the writer.
     final AiProvider p = forSending ? _writer : (local ?? provider);
     final model = forSending
@@ -504,6 +526,15 @@ class Languages {
     'ukrainian': 'uk', 'czech': 'cs', 'romanian': 'ro', 'hungarian': 'hu', 'bengali': 'bn', 'tamil': 'ta',
     'telugu': 'te', 'marathi': 'mr', 'urdu': 'ur', 'persian': 'fa', 'gujarati': 'gu', 'punjabi': 'pa',
   };
+
+  /// English name for a language code ("de" → "German"); null if unknown.
+  static String? nameOf(String code) {
+    final c = code.toLowerCase().split(RegExp('[-_]')).first;
+    for (final e in _codes.entries) {
+      if (e.value == c) return e.key[0].toUpperCase() + e.key.substring(1);
+    }
+    return null;
+  }
 
   static String code(String language) => _codes[language.toLowerCase()] ?? language.toLowerCase().substring(0, 2);
 
