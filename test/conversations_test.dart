@@ -16,7 +16,7 @@ const googleIcs = 'BEGIN:VCALENDAR\r\nPRODID:-//Google Inc//Google Calendar 70.9
     'DTSTAMP:20261110T090000Z\r\nORGANIZER;CN=Olga Orga:mailto:olga@example.com\r\nUID:abc123@google.com\r\n'
     'ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Me Myself;X-NUM-GUESTS=0:mailto:me@example.org\r\n'
     'ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN=Olga Orga:mailto:olga@example.com\r\n'
-    'SEQUENCE:2\r\nSUMMARY:Planning\\, Q1\r\nLOCATION:Room 4\; Berlin\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n';
+    'SEQUENCE:2\r\nSUMMARY:Planning\\, Q1\r\nLOCATION:Room 4\\; Berlin\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n';
 
 const outlookIcs = 'BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nPRODID:Microsoft Exchange Server 2010\r\nVERSION:2.0\r\n'
     'BEGIN:VTIMEZONE\r\nTZID:W. Europe Standard Time\r\n'
