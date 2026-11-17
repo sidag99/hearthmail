@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/foundation.dart';
@@ -14,7 +15,12 @@ import '../models/triage.dart';
 import '../services/ai/ai_provider.dart';
 import '../services/ai/email_ai.dart';
 import '../services/ai/ollama_provider.dart';
+import '../services/dock_badge.dart';
+import '../services/inbox_watcher.dart';
 import '../services/mail_service.dart';
+import '../services/message_cache.dart';
+import '../services/notification_rules.dart';
+import '../services/notifier.dart';
 import '../services/oauth.dart';
 import '../services/settings_store.dart';
 import '../services/triage_cache.dart';
@@ -139,6 +145,13 @@ class AccountSession {
   VectorIndex? vectors;
   MailService? indexService;
   bool indexing = false;
+
+  /// Offline copy of the inbox, IDLE watcher and bookkeeping (see the
+  /// "Offline cache, instant mail, notifications" region of [AppState]).
+  MessageCache? cache;
+  InboxWatcher? watcher;
+  String? cacheSig;
+  int? cachedUidValidity;
 
   String get id => config.id;
   bool get connected => status == ConnectionStatus.connected && service != null;
@@ -339,6 +352,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> init() async {
     userData = await UserData.open();
+    await _initInstantMail(); // show cached mail before anything slow
     await refreshAi();
     _tickTimer = Timer.periodic(const Duration(seconds: 30), (_) => _tick());
     await Future.wait([for (final s in sessions) _connect(s)]);
@@ -375,11 +389,13 @@ class AppState extends ChangeNotifier {
       await service.connect();
       s.service = service;
       s.triage ??= await TriageCache.open(s.id);
+      s.cache ??= await MessageCache.open(s.id);
       s.mailboxes = await service.mailboxes();
       s.inbox = s.mailboxes.firstWhere((b) => b.isInbox, orElse: () => s.mailboxes.first);
       s.status = ConnectionStatus.connected;
       notifyListeners();
       await _loadInbox(s);
+      _startWatching(s);
     } catch (e) {
       s.status = ConnectionStatus.failed;
       s.error = friendlyError(e);
@@ -466,7 +482,7 @@ class AppState extends ChangeNotifier {
     try {
       final msgs = await service.fetchPage(box);
       _tag(msgs, s, box);
-      s.inboxMessages = msgs;
+      s.inboxMessages = _mergeCached(s, msgs, box);
       unawaited(_afterFetch(s, msgs));
       s.inboxPage = 1;
       s.inboxHasMore = msgs.length >= 40;
@@ -518,6 +534,7 @@ class AppState extends ChangeNotifier {
     await s?.service?.disconnect();
     await s?.triage?.clear();
     await s?.indexService?.disconnect();
+    await _dropInstantMail(s, config.id);
     await (s?.vectors ?? await VectorIndex.open(config.id, '')).delete();
     sessions = sessions.where((x) => x.id != config.id).toList();
     await _store.saveAccounts(accounts);
@@ -751,7 +768,7 @@ class AppState extends ChangeNotifier {
   }
 
   /// Fetches the newest mail and merges anything new at the top.
-  Future<void> refresh({bool quiet = false}) async {
+  Future<void> refresh({bool quiet = false, AccountSession? only}) async {
     if (view.kind == ViewKind.folder && folderBox != null && !folderBox!.isInbox && !quiet) {
       await openFolder(folderSession!, folderBox!);
       return;
@@ -759,7 +776,9 @@ class AppState extends ChangeNotifier {
     var gotNew = false;
     await Future.wait([
       for (final s in sessions)
-        if (s.status == ConnectionStatus.failed && quiet)
+        if (only != null && !identical(only, s))
+          Future<void>.value()
+        else if (s.status == ConnectionStatus.failed && quiet)
           _connect(s) // retry broken accounts in the background
         else if (s.connected && !s.loading)
           () async {
@@ -768,10 +787,12 @@ class AppState extends ChangeNotifier {
               _tag(latest, s, s.inbox!);
               final known = s.inboxMessages.map((m) => m.uid).toSet();
               final fresh = latest.where((m) => !known.contains(m.uid)).toList();
+              _syncPage(s, latest);
               if (fresh.isNotEmpty) {
                 s.inboxMessages = [...fresh, ...s.inboxMessages];
                 gotNew = true;
                 unawaited(_afterFetch(s, fresh));
+                unawaited(_notifyNewMail(s, fresh));
               }
             } catch (e) {
               if (!quiet) toast('${s.config.email}: ${friendlyError(e)}');
@@ -1813,8 +1834,234 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ============================================================================
+  // Offline cache, instant mail (IDLE), notifications, Dock badge
+  // ============================================================================
+
+  final _notifier = MailNotifier();
+  final _dockBadge = DockBadge();
+  Timer? _cacheTimer;
+  Timer? _badgeTimer;
+  Timer? _activityTimer;
+  final _activeSessions = <AccountSession>{};
+  final _opens = StreamController<MimeMessage>.broadcast();
+
+  /// A notification the user clicked whose message is not loaded yet.
+  /// It is opened as soon as the message appears in its account's inbox.
+  ({String accountId, int uid})? pendingOpen;
+
+  /// Fires when the app opened a message because the user clicked its
+  /// notification. The message is already `selected` and the view is the
+  /// combined inbox; listen to scroll it into view if needed.
+  Stream<MimeMessage> get openRequests => _opens.stream;
+
+  /// Shows cached mail and wires everything up. Called once from [init],
+  /// before any network access.
+  Future<void> _initInstantMail() async {
+    addListener(_onStateChanged);
+    _notifier.onOpen = openFromNotification;
+    unawaited(_notifier.init());
+    for (final s in sessions) {
+      s.triage ??= await TriageCache.open(s.id);
+      final cache = s.cache = await MessageCache.open(s.id);
+      final cached = await cache.load();
+      if (cached.messages.isEmpty) continue;
+      // Tag with a stand-in Inbox until the real one is known, so actions
+      // work the moment the account connects.
+      s.inbox ??= Mailbox(
+        encodedName: cached.path ?? 'INBOX',
+        encodedPath: cached.path ?? 'INBOX',
+        flags: [MailboxFlag.inbox],
+        pathSeparator: '/',
+      );
+      _tag(cached.messages, s, s.inbox!);
+      s.inboxMessages = cached.messages;
+      s.cachedUidValidity = cached.uidValidity;
+      s.cacheSig = _signature(s);
+    }
+    _mergedCache = null;
+    notifyListeners();
+  }
+
+  Future<void> _dropInstantMail(AccountSession? s, String accountId) async {
+    await s?.watcher?.stop();
+    s?.watcher = null;
+    await (s?.cache ?? await MessageCache.open(accountId)).clear();
+  }
+
+  void _disposeInstantMail() {
+    removeListener(_onStateChanged);
+    _cacheTimer?.cancel();
+    _badgeTimer?.cancel();
+    _activityTimer?.cancel();
+    for (final s in sessions) {
+      unawaited(s.watcher?.stop());
+    }
+    _opens.close();
+  }
+
+  /// Runs on every state change: opens a pending notification target,
+  /// schedules a cache save and a Dock badge update.
+  void _onStateChanged() {
+    _resolvePendingOpen();
+    _cacheTimer ??= Timer(const Duration(milliseconds: 1500), () {
+      _cacheTimer = null;
+      _saveCaches();
+    });
+    _badgeTimer?.cancel();
+    _badgeTimer = Timer(const Duration(milliseconds: 400), () {
+      unawaited(_dockBadge.set(unreadFor(const MailView.allInboxes())));
+    });
+  }
+
+  String _signature(AccountSession s) => Object.hashAll([
+        for (final m in s.inboxMessages) Object.hash(m.uid, identityHashCode(m), m.flags?.join(',')),
+      ]).toString();
+
+  void _saveCaches() {
+    for (final s in sessions) {
+      final cache = s.cache;
+      // Only mirror what the server confirmed; an offline or half-loaded
+      // state must not overwrite a good cache.
+      if (cache == null || !s.connected || s.loading) continue;
+      final sig = _signature(s);
+      if (sig == s.cacheSig) continue;
+      s.cacheSig = sig;
+      unawaited(cache
+          .save(s.inboxMessages,
+              uidValidity: s.service?.client.selectedMailbox?.uidValidity ?? s.cachedUidValidity, path: s.inbox?.path)
+          .catchError((Object _) {}));
+    }
+  }
+
+  /// Fresh first page plus the cached messages older than it. Cached
+  /// messages inside the page's range are dropped (the page is the truth:
+  /// they may have been deleted or moved elsewhere).
+  List<MimeMessage> _mergeCached(AccountSession s, List<MimeMessage> page, Mailbox box) {
+    final cached = s.inboxMessages;
+    final now = s.service?.client.selectedMailbox?.uidValidity ?? box.uidValidity;
+    final valid = s.cachedUidValidity == null || now == null || s.cachedUidValidity == now;
+    s.cachedUidValidity = now ?? s.cachedUidValidity;
+    final uids = [for (final m in page) ?m.uid];
+    if (!valid || cached.isEmpty || uids.isEmpty) return page;
+    final oldest = uids.reduce(math.min);
+    final older = [for (final m in cached) if ((m.uid ?? oldest) < oldest) m];
+    _tag(older, s, box);
+    return [...page, ...older];
+  }
+
+  /// Applies server truth for the newest page to what is already loaded:
+  /// updated flags, and messages removed elsewhere.
+  void _syncPage(AccountSession s, List<MimeMessage> latest) {
+    final byUid = {for (final m in latest) if (m.uid != null) m.uid!: m};
+    if (byUid.isEmpty) return;
+    final oldest = byUid.keys.reduce(math.min);
+    s.inboxMessages.removeWhere((m) => m.uid != null && m.uid! >= oldest && !byUid.containsKey(m.uid));
+    for (final m in s.inboxMessages) {
+      final fresh = byUid[m.uid];
+      if (fresh != null && !identical(fresh, m)) m.flags = fresh.flags;
+    }
+  }
+
+  // ---- IDLE -----------------------------------------------------------------
+
+  void _startWatching(AccountSession s) {
+    unawaited(s.watcher?.stop());
+    final watcher = InboxWatcher(
+      connect: () async {
+        final creds = await _credentialsFor(s.config);
+        // This connection only listens: no need to download bodies.
+        return creds == null ? null : MailService(s.config, creds, downloadSizeLimit: null);
+      },
+      onActivity: () => _onInboxActivity(s),
+    );
+    s.watcher = watcher;
+    watcher.start();
+  }
+
+  /// The server said something changed in an Inbox: run the normal refresh
+  /// for that account (a burst of events becomes one refresh).
+  void _onInboxActivity(AccountSession s) {
+    _activeSessions.add(s);
+    _activityTimer?.cancel();
+    _activityTimer = Timer(const Duration(milliseconds: 400), () {
+      final batch = _activeSessions.toList();
+      _activeSessions.clear();
+      for (final x in batch) {
+        if (sessions.contains(x) && x.connected) unawaited(refresh(quiet: true, only: x));
+      }
+    });
+  }
+
+  // ---- Notifications ----------------------------------------------------------
+
+  Future<void> _notifyNewMail(AccountSession s, List<MimeMessage> fresh) async {
+    if (!settings.notifications || !MailNotifier.supported) return;
+    // Give the AI a moment to sort them, so promotions stay quiet.
+    if (settings.autoSort && aiReady) {
+      for (var i = 0; i < 20 && fresh.any((m) => triageOf(m) == null); i++) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
+    }
+    final worth = [
+      for (final m in fresh)
+        if (s.inboxMessages.contains(m) && // not archived or junked by a rule meanwhile
+            shouldNotify(
+              enabled: settings.notifications,
+              isSeen: m.isSeen,
+              isMuted: isMuted(m),
+              isBlocked: userData.isBlocked(MailService.senderOf(m)?.email ?? ''),
+              category: triageOf(m)?.category,
+              received: MailService.dateOf(m),
+            ))
+          m,
+    ];
+    if (worth.isEmpty) return;
+    // At most three banners; the rest become one summary.
+    for (final m in worth.take(3)) {
+      await _notifier.show(
+        title: MailService.senderName(m),
+        body: MailService.subjectOf(m),
+        payload: notificationPayload(s.id, m.uid ?? 0),
+      );
+    }
+    if (worth.length > 3) {
+      await _notifier.show(
+        title: s.config.email,
+        body: '${worth.length - 3} more new messages',
+        payload: notificationPayload(s.id, worth[3].uid ?? 0),
+      );
+    }
+  }
+
+  /// A notification was clicked: show that message (now, or as soon as it
+  /// is loaded; see [pendingOpen]).
+  void openFromNotification(String payload) {
+    final p = parseNotificationPayload(payload);
+    if (p == null) return;
+    pendingOpen = p;
+    _resolvePendingOpen();
+  }
+
+  void _resolvePendingOpen() {
+    final p = pendingOpen;
+    if (p == null) return;
+    final s = sessionById(p.accountId);
+    if (s == null) {
+      pendingOpen = null;
+      return;
+    }
+    final m = s.inboxMessages.where((x) => x.uid == p.uid).firstOrNull;
+    if (m == null) return; // not loaded yet; try again on the next change
+    pendingOpen = null;
+    setView(const MailView.allInboxes());
+    unawaited(openMessage(m));
+    if (!_opens.isClosed) _opens.add(m);
+  }
+
   @override
   void dispose() {
+    _disposeInstantMail();
     _refreshTimer?.cancel();
     _tickTimer?.cancel();
     for (final t in _pendingSends.values) {

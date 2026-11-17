@@ -19,6 +19,7 @@ class AppDelegate: FlutterAppDelegate {
   override func applicationDidFinishLaunching(_ notification: Notification) {
     if let controller = mainFlutterWindow?.contentViewController as? FlutterViewController {
       setUpChannel(controller)
+      setUpBadge(controller)
     }
     super.applicationDidFinishLaunching(notification)
   }
@@ -38,6 +39,20 @@ class AppDelegate: FlutterAppDelegate {
       case "isDefaultMailApp":
         result(self?.isDefaultMailApp() ?? false)
       default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  /// Dock icon badge (unread count), driven from Dart (lib/services/dock_badge.dart).
+  private func setUpBadge(_ controller: FlutterViewController) {
+    let badge = FlutterMethodChannel(name: "app.hearthmail/badge", binaryMessenger: controller.engine.binaryMessenger)
+    badge.setMethodCallHandler { call, result in
+      if call.method == "setBadge" {
+        let label = call.arguments as? String
+        NSApp.dockTile.badgeLabel = (label?.isEmpty ?? true) ? nil : label
+        result(nil)
+      } else {
         result(FlutterMethodNotImplemented)
       }
     }
