@@ -8,6 +8,7 @@ import '../models/account_config.dart';
 import '../models/email_content.dart';
 import '../models/search_plan.dart';
 import 'html_text.dart';
+import 'message_cache.dart';
 import 'oauth.dart';
 
 /// How an account proves who it is.
@@ -37,12 +38,13 @@ class OAuthCredentials extends MailCredentials {
 /// of the Inbox could slip in between "select Sent" and "delete message 12",
 /// and the wrong message would be deleted.
 class MailService {
-  MailService(this.config, MailCredentials credentials)
+  MailService(this.config, MailCredentials credentials, {int? downloadSizeLimit = 256 * 1024})
       : client = MailClient(
           _account(config, credentials),
           // Messages up to this size are downloaded whole when listing, so
           // previews and AI sorting work without extra round trips.
-          downloadSizeLimit: 256 * 1024,
+          // (A connection that only watches for new mail passes null.)
+          downloadSizeLimit: downloadSizeLimit,
           defaultResponseTimeout: const Duration(seconds: 30),
           defaultWriteTimeout: const Duration(seconds: 10),
           refresh: credentials is OAuthCredentials
@@ -192,7 +194,7 @@ class MailService {
   }
 
   static bool hasBody(MimeMessage m) =>
-      m.decodeTextPlainPart() != null || m.decodeTextHtmlPart() != null;
+      !MessageCache.isStub(m) && (m.decodeTextPlainPart() != null || m.decodeTextHtmlPart() != null);
 
   /// The folder to search for "all my mail": Gmail's All Mail if present.
   Mailbox? searchFolder(List<Mailbox> boxes) {

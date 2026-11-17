@@ -25,6 +25,7 @@ class AppSettings {
     this.myLanguage = 'English',
     this.undoSendSeconds = 10,
     this.indexDepth = 3000,
+    this.notifications = true,
   });
 
   final String ollamaUrl;
@@ -60,6 +61,9 @@ class AppSettings {
   /// How many recent emails per account to index for semantic search.
   final int indexDepth;
 
+  /// Notify about new unread inbox mail.
+  final bool notifications;
+
   AppSettings copyWith({
     String? ollamaUrl,
     String? fastModel,
@@ -77,6 +81,7 @@ class AppSettings {
     String? myLanguage,
     int? undoSendSeconds,
     int? indexDepth,
+    bool? notifications,
   }) =>
       AppSettings(
         ollamaUrl: ollamaUrl ?? this.ollamaUrl,
@@ -95,6 +100,7 @@ class AppSettings {
         myLanguage: myLanguage ?? this.myLanguage,
         undoSendSeconds: undoSendSeconds ?? this.undoSendSeconds,
         indexDepth: indexDepth ?? this.indexDepth,
+        notifications: notifications ?? this.notifications,
       );
 
   Map<String, dynamic> toJson() => {
@@ -114,6 +120,7 @@ class AppSettings {
         'myLanguage': myLanguage,
         'undoSendSeconds': undoSendSeconds,
         'indexDepth': indexDepth,
+        'notifications': notifications,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -133,6 +140,7 @@ class AppSettings {
         myLanguage: j['myLanguage'] as String? ?? 'English',
         undoSendSeconds: j['undoSendSeconds'] as int? ?? 10,
         indexDepth: j['indexDepth'] as int? ?? 3000,
+        notifications: j['notifications'] as bool? ?? true,
       );
 }
 
