@@ -14,9 +14,11 @@ import '../models/triage.dart';
 import '../services/ai/ai_provider.dart';
 import '../services/ai/email_ai.dart';
 import '../services/ai/ollama_provider.dart';
+import '../services/calendar_invite.dart';
 import '../services/mail_service.dart';
 import '../services/oauth.dart';
 import '../services/settings_store.dart';
+import '../services/threads.dart';
 import '../services/triage_cache.dart';
 import '../services/user_data.dart';
 import '../services/vector_index.dart';
@@ -84,6 +86,7 @@ class OutgoingMail {
     this.files = const [],
     this.sendAt,
     this.followUpDays,
+    this.replacesDraft,
   });
 
   final AccountSession from;
@@ -96,6 +99,10 @@ class OutgoingMail {
 
   /// Remind me if nobody replies within this many days.
   final int? followUpDays;
+
+  /// An older draft this message continues; deleted from the Drafts folder
+  /// once the message is sent, scheduled or saved again.
+  final MimeMessage? replacesDraft;
 }
 
 /// One connected account: its server connection, folders and inbox.
@@ -355,6 +362,7 @@ class AppState extends ChangeNotifier {
       final msgs = await service.fetchPage(box);
       _tag(msgs, s, box);
       s.inboxMessages = msgs;
+      unawaited(_loadSent(s));
       unawaited(_afterFetch(s, msgs));
       s.inboxPage = 1;
       s.inboxHasMore = msgs.length >= 40;
@@ -649,6 +657,7 @@ class AppState extends ChangeNotifier {
         else if (s.connected && !s.loading)
           () async {
             try {
+              unawaited(_loadSent(s, quiet: quiet));
               final latest = await s.service!.fetchPage(s.inbox!);
               _tag(latest, s, s.inbox!);
               final known = s.inboxMessages.map((m) => m.uid).toSet();
@@ -774,6 +783,7 @@ class AppState extends ChangeNotifier {
   Future<void> sendMail(OutgoingMail mail) async {
     if (mail.sendAt != null) {
       await _schedule(mail);
+      unawaited(_removeReplacedDraft(mail));
       return;
     }
     final delay = settings.undoSendSeconds;
@@ -814,6 +824,8 @@ class AppState extends ChangeNotifier {
       final r = mail.inReplyTo;
       await service.sendBuilt(message, inReplyTo: r, inReplyToBox: r == null ? null : _box[r]);
       _afterSent(mail.from, message, mail.followUpDays);
+      unawaited(_removeReplacedDraft(mail));
+      _reloadSentSoon(mail.from);
       toast('Message sent');
     } catch (e) {
       showToast(Toast(
@@ -934,6 +946,7 @@ class AppState extends ChangeNotifier {
       files: mail.files,
     );
     await service.saveDraft(message);
+    unawaited(_removeReplacedDraft(mail));
     toast('Draft saved to ${mail.from.config.email}');
   }
 
@@ -1669,6 +1682,278 @@ class AppState extends ChangeNotifier {
     return s.replaceFirst(RegExp(r'^(Exception|MailException|ImapException):\s*'), '');
   }
 
+  // =====================================================================
+  // Conversations, meeting invitations and editable drafts.
+  // Self-contained. Widgets: ui/conversation_view.dart, ui/invite_card.dart.
+  // =====================================================================
+
+  // ---- conversations
+
+  /// Each account's newest Sent messages (tagged like inbox messages).
+  final _sent = <String, List<MimeMessage>>{};
+  final _sentLoadedAt = <String, DateTime>{};
+  ThreadIndex? _threadIndex;
+  Map<String, List<MimeMessage>> _threadMembers = {};
+  Object? _threadSig;
+
+  List<MimeMessage> sentMessagesOf(AccountSession s) => _sent[s.id] ?? const [];
+
+  /// Loads the newest ~60 Sent messages (Gmail: Sent Mail). Quiet calls
+  /// (the 3-minute timer) are throttled to one per 10 minutes.
+  Future<void> _loadSent(AccountSession s, {bool quiet = false}) async {
+    final service = s.service;
+    if (service == null) return;
+    final last = _sentLoadedAt[s.id];
+    if (quiet && last != null && DateTime.now().difference(last) < const Duration(minutes: 10)) return;
+    final box = service.sentMailbox(s.mailboxes);
+    if (box == null) return;
+    _sentLoadedAt[s.id] = DateTime.now();
+    try {
+      final fetched = await service.fetchPage(box, count: 60);
+      final known = {
+        for (final m in _sent[s.id] ?? const <MimeMessage>[])
+          if (m.uid != null) m.uid!: m,
+      };
+      final merged = [for (final m in fetched) known[m.uid] ?? m];
+      _tag(merged, s, box);
+      _sent[s.id] = merged;
+      _threadSig = null;
+      notifyListeners();
+    } catch (_) {
+      // Conversations simply show fewer messages; nothing to tell the user.
+    }
+  }
+
+  void _reloadSentSoon(AccountSession s) {
+    Timer(const Duration(seconds: 4), () {
+      if (sessions.contains(s)) unawaited(_loadSent(s));
+    });
+  }
+
+  @visibleForTesting
+  void debugSetSent(AccountSession s, List<MimeMessage> msgs, Mailbox box) {
+    _tag(msgs, s, box);
+    _sent[s.id] = msgs;
+    _threadSig = null;
+  }
+
+  List<MimeMessage> _allLoaded() => [
+        for (final s in sessions) ...s.inboxMessages,
+        for (final s in sessions) ...?_sent[s.id],
+        if (!identical(folderMessages, folderSession?.inboxMessages)) ...folderMessages,
+        ...searchResults,
+      ];
+
+  void _ensureThreads() {
+    final all = _allLoaded();
+    final sig = Object.hash(all.length, all.isEmpty ? 0 : identityHashCode(all.first), all.isEmpty ? 0 : identityHashCode(all.last));
+    if (_threadIndex != null && _threadSig == sig) return;
+    final index = ThreadIndex(all);
+    final members = <String, List<MimeMessage>>{};
+    final seenIds = <String>{};
+    final seen = Set<MimeMessage>.identity();
+    for (final m in all) {
+      if (!seen.add(m)) continue;
+      final id = ThreadIndex.messageIdOf(m);
+      if (id != null && !seenIds.add(id)) continue;
+      members.putIfAbsent(index.keyOf(m), () => []).add(m);
+    }
+    for (final l in members.values) {
+      l.sort((a, b) => _dateOf(a).compareTo(_dateOf(b)));
+    }
+    _threadIndex = index;
+    _threadMembers = members;
+    _threadSig = sig;
+  }
+
+  static DateTime _dateOf(MimeMessage m) => MailService.dateOf(m) ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Every loaded message (inbox, Sent, open folder, search results) of
+  /// [m]'s conversation, de-duplicated by Message-ID, oldest first.
+  List<MimeMessage> conversationOf(MimeMessage m) {
+    _ensureThreads();
+    final list = [...?_threadMembers[_threadIndex!.keyOf(m)]];
+    final id = ThreadIndex.messageIdOf(m);
+    final i = list.indexWhere((x) => identical(x, m) || (id != null && ThreadIndex.messageIdOf(x) == id));
+    if (i >= 0) {
+      list[i] = m;
+    } else {
+      list.add(m);
+      list.sort((a, b) => _dateOf(a).compareTo(_dateOf(b)));
+    }
+    return list;
+  }
+
+  int conversationSize(MimeMessage m) => conversationOf(m).length;
+
+  /// Keeps only the newest message of each conversation, in [list]'s order.
+  /// Conversations are recognised across everything loaded (so a thread
+  /// you answered from Sent still groups with its inbox messages).
+  List<MimeMessage> collapseThreads(List<MimeMessage> list) {
+    if (list.length < 2) return list;
+    _ensureThreads();
+    final index = _threadIndex!;
+    final keys = Map<MimeMessage, String>.identity();
+    final newest = <String, MimeMessage>{};
+    for (final m in list) {
+      final k = index.keyOf(m);
+      keys[m] = k;
+      final cur = newest[k];
+      if (cur == null || _dateOf(m).isAfter(_dateOf(cur))) newest[k] = m;
+    }
+    return [for (final m in list) if (identical(newest[keys[m]], m)) m];
+  }
+
+  /// The plain-text body of [m], downloading it first if needed.
+  Future<String> conversationBody(MimeMessage m) async {
+    if (!MailService.hasBody(m)) {
+      final s = _owner[m];
+      final box = _box[m];
+      final service = s?.service;
+      if (service != null && box != null) {
+        try {
+          final full = await service.ensureFull(box, m);
+          _owner[full] = s;
+          _box[full] = box;
+          _replaceMessage(m, full);
+          for (final l in _sent.values) {
+            final i = l.indexOf(m);
+            if (i >= 0) l[i] = full;
+          }
+          _threadSig = null;
+          return MailService.bodyText(full);
+        } catch (_) {}
+      }
+    }
+    return MailService.bodyText(m);
+  }
+
+  // ---- meeting invitations
+
+  final _inviteCache = Expando<_InviteBox>('invite');
+  final _inviteAnswers = <String, PartStat>{};
+
+  /// The meeting invitation (or cancellation) in [m], parsed once.
+  /// Null if there is none, or if the body has not been downloaded yet
+  /// (call again after `openMessage` finished).
+  Invite? inviteOf(MimeMessage m) {
+    final cached = _inviteCache[m];
+    if (cached != null) return cached.invite;
+    final mine = [for (final s in sessions) s.config.email];
+    final invite = Invite.findIn(m, myEmails: mine);
+    final usable = invite != null && (invite.isRequest || invite.isCancel) ? invite : null;
+    if (usable != null || MailService.hasBody(m)) _inviteCache[m] = _InviteBox(usable);
+    return usable;
+  }
+
+  /// My answer to [invite]: sent now in this session, else as shown in the
+  /// invitation itself. Null if I have not answered.
+  PartStat? inviteAnswerOf(Invite invite) {
+    final a = _inviteAnswers[invite.key];
+    if (a != null) return a;
+    final p = invite.me?.partStat;
+    return p == null || p == PartStat.needsAction ? null : p;
+  }
+
+  /// Sends my answer to the organizer (an iTIP REPLY email).
+  Future<void> respondToInvite(MimeMessage m, Invite invite, PartStat stat) async {
+    final service = _owner[m]?.service;
+    if (service == null) {
+      toast('This account is not connected.');
+      return;
+    }
+    try {
+      final reply = invite.buildReplyMessage(stat, me: service.me, inReplyTo: m);
+      await service.sendBuilt(reply, inReplyTo: m, inReplyToBox: _box[m]);
+      _inviteAnswers[invite.key] = stat;
+      toast(switch (stat) {
+        PartStat.accepted => 'Accepted "${invite.summary}"',
+        PartStat.tentative => 'Answered "Maybe" to "${invite.summary}"',
+        PartStat.declined => 'Declined "${invite.summary}"',
+        PartStat.needsAction => 'Reply sent',
+      });
+      final from = _owner[m];
+      if (from != null) _reloadSentSoon(from);
+    } catch (e) {
+      toast('Could not send your answer: ${friendlyError(e)}');
+    }
+    notifyListeners();
+  }
+
+  /// Opens the invitation's own .ics in the Calendar app.
+  Future<void> openInviteInCalendar(Invite invite) async {
+    final dir = Directory('${(await getTemporaryDirectory()).path}/events');
+    await dir.create(recursive: true);
+    final f = File('${dir.path}/invite_${DateTime.now().millisecondsSinceEpoch}.ics');
+    await f.writeAsString(invite.toImportIcs());
+    await launchUrl(Uri.file(f.path));
+  }
+
+  // ---- editable drafts
+
+  final _deletedDrafts = Expando<bool>('deletedDraft');
+
+  /// Turns a message from a Drafts folder back into something the composer
+  /// can open. Attachments are saved to temporary files.
+  Future<OutgoingMail> draftToOutgoing(MimeMessage draft) async {
+    final s = _owner[draft] ?? defaultSendingSession;
+    if (s == null) throw Exception('No account to send this draft from.');
+    final box = _box[draft];
+    var d = draft;
+    if (!MailService.hasBody(d) && s.service != null && box != null) {
+      d = await s.service!.ensureFull(box, d);
+      _owner[d] = s;
+      _box[d] = box;
+      _replaceMessage(draft, d);
+    }
+    final files = d.hasAttachments() ? await attachmentFiles(d) : <File>[];
+    final env = d.envelope;
+    final irt = RegExp(r'<[^<>\s]+>').firstMatch(d.getHeaderValue('in-reply-to') ?? env?.inReplyTo ?? '')?.group(0);
+    MimeMessage? parent;
+    if (irt != null) {
+      for (final m in _allLoaded()) {
+        if (ThreadIndex.messageIdOf(m) == irt) {
+          parent = m;
+          break;
+        }
+      }
+    }
+    return OutgoingMail(
+      from: s,
+      to: MailService.addressList(d.to ?? env?.to),
+      cc: MailService.addressList(d.cc ?? env?.cc),
+      bcc: MailService.addressList(d.bcc ?? env?.bcc),
+      subject: (d.decodeSubject() ?? env?.subject ?? '').trim(),
+      body: MailService.bodyText(d),
+      inReplyTo: parent,
+      files: files,
+      replacesDraft: d,
+    );
+  }
+
+  /// Deletes the draft [mail] continues, once its replacement is safe.
+  /// Only ever touches messages in a Drafts folder.
+  Future<void> _removeReplacedDraft(OutgoingMail mail) async {
+    final d = mail.replacesDraft;
+    if (d == null || _deletedDrafts[d] == true) return;
+    final box = _box[d];
+    final service = (_owner[d] ?? mail.from).service;
+    if (box == null || service == null) return;
+    if (!box.hasFlag(MailboxFlag.drafts) && !box.name.toLowerCase().contains('draft')) return;
+    _deletedDrafts[d] = true;
+    try {
+      await service.deleteDraft(box, d);
+      for (final list in [folderMessages, searchResults, for (final x in sessions) x.inboxMessages]) {
+        list.remove(d);
+      }
+      _mergedCache = null;
+      _threadSig = null;
+      notifyListeners();
+    } catch (_) {
+      _deletedDrafts[d] = false;
+    }
+  }
+
   /// Loads sample data without a server, for UI tests and screenshots.
   @visibleForTesting
   void debugLoad({
@@ -1717,4 +2002,9 @@ class AppState extends ChangeNotifier {
     _toasts.close();
     super.dispose();
   }
+}
+
+class _InviteBox {
+  const _InviteBox(this.invite);
+  final Invite? invite;
 }

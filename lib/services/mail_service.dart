@@ -379,6 +379,24 @@ class MailService {
     }
   }
 
+  /// The Sent folder (Gmail: "Sent Mail"), if the server has one.
+  Mailbox? sentMailbox(List<Mailbox> boxes) {
+    for (final b in boxes) {
+      if (b.hasFlag(MailboxFlag.sent)) return b;
+    }
+    for (final b in boxes) {
+      final n = b.name.toLowerCase();
+      if (n == 'sent' || n == 'sent mail' || n == 'sent items') return b;
+    }
+    return null;
+  }
+
+  /// Removes a draft that was replaced by a newer version.
+  Future<void> deleteDraft(Mailbox drafts, MimeMessage draft) => _serial(() async {
+        await _ensure(drafts);
+        await client.deleteMessage(draft, expunge: true);
+      });
+
   /// Saves an unfinished message to the account's Drafts folder.
   Future<void> saveDraft(MimeMessage message) => _serial(() => client.saveDraftMessage(message));
 
@@ -529,17 +547,23 @@ class MailService {
     return null;
   }
 
-  /// A key shared by every message of one conversation.
+  /// A key shared by every message of one conversation: the root of
+  /// References, else In-Reply-To, else the message's own ID.
+  ///
+  /// A reply made by [build] (also when read back from Sent) carries the
+  /// original's References plus its ID, so it gets the same key. When some
+  /// client left out References, `ThreadIndex` (threads.dart) links
+  /// messages through all the IDs they mention and is more reliable.
   static String threadKeyOf(MimeMessage m) {
+    final idPattern = RegExp(r'<[^<>\s]+>');
     final refs = (m.getHeaderValue('references') ?? '').trim();
-    if (refs.isNotEmpty) {
-      final first = RegExp(r'<[^>]+>').firstMatch(refs)?.group(0);
-      if (first != null) return first;
-    }
-    final irt = (m.getHeaderValue('in-reply-to') ?? '').trim();
-    if (irt.isNotEmpty) return irt;
-    return (m.getHeaderValue('message-id') ?? m.envelope?.messageId ?? '').trim().isNotEmpty
-        ? (m.getHeaderValue('message-id') ?? m.envelope!.messageId!).trim()
+    final first = idPattern.firstMatch(refs)?.group(0);
+    if (first != null) return first;
+    final irt = (m.getHeaderValue('in-reply-to') ?? m.envelope?.inReplyTo ?? '').trim();
+    if (irt.isNotEmpty) return idPattern.firstMatch(irt)?.group(0) ?? irt;
+    final own = (m.getHeaderValue('message-id') ?? m.envelope?.messageId ?? '').trim();
+    return own.isNotEmpty
+        ? (idPattern.firstMatch(own)?.group(0) ?? own)
         : 'subject:${normalizedSubject(subjectOf(m))}';
   }
 
