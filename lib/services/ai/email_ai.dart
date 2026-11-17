@@ -32,6 +32,9 @@ class EmailAi {
     this.styleNotes = '',
     this.translationModel = '',
     this.embeddingModel = '',
+    this.writer,
+    this.writerModel = '',
+    this.local,
     DateTime Function()? clock,
   }) : _now = clock ?? DateTime.now;
 
@@ -43,9 +46,24 @@ class EmailAi {
   /// semantic search is off.
   final String embeddingModel;
 
+  /// Runs the "everything else" jobs with [fastModel].
   final AiProvider provider;
   final String fastModel;
+
+  /// The local writing model; also used for reading translation.
   final String writingModel;
+
+  /// Optional separate engine for writing jobs (drafts, rewrites, subjects,
+  /// digests, outgoing translation). Null: [provider] with [writingModel].
+  final AiProvider? writer;
+  final String writerModel;
+
+  /// The local provider. Reading translation always uses it, never a cloud
+  /// engine. Null: [provider].
+  final AiProvider? local;
+
+  AiProvider get _writer => writer ?? provider;
+  String get _writerModel => writer == null ? writingModel : writerModel;
   final String userName;
   final String styleNotes;
   final DateTime Function() _now;
@@ -88,7 +106,7 @@ class EmailAi {
       list.writeln('#${i + 1} | From: ${e.from} | Subject: ${e.subject}');
       list.writeln('   ${e.forPrompt(maxBodyChars: 700).split('\n').skip(4).join(' ').trim()}');
     }
-    return provider.chat([
+    return _writer.chat([
       const AiMessage.system(
           'You brief a busy person on their inbox. Group the emails into these Markdown sections, '
           'omitting empty ones:\n'
@@ -98,7 +116,7 @@ class EmailAi {
           'Under each, use "- " bullets of one short sentence that say who and what, and mention deadlines. '
           'Each email appears in exactly one section. Be concrete. No intro or outro.'),
       AiMessage.user('Today is ${_today()}. Here are my emails:\n\n$list'),
-    ], model: writingModel, temperature: 0.3);
+    ], model: _writerModel, temperature: 0.3);
   }
 
   // ---------------------------------------------------------------- replying
@@ -131,50 +149,50 @@ class EmailAi {
   /// Full reply draft. [instruction] is what the user wants to say, e.g.
   /// "yes but Thursday instead" — may be empty to let the AI decide.
   Stream<String> draftReply(EmailContent email, {String instruction = ''}) =>
-      provider.chat([
+      _writer.chat([
         AiMessage.system(_writerRules),
         AiMessage.user(
             'Write my reply to the email below.\n'
             '${instruction.trim().isEmpty ? 'Reply appropriately and helpfully.' : 'What I want to say: ${instruction.trim()}'}\n'
             'Match the formality of the original. Greet the sender by first name if it is a person.\n\n'
             '--- Original email ---\n${email.forPrompt()}'),
-      ], model: writingModel, temperature: 0.6);
+      ], model: _writerModel, temperature: 0.6);
 
   // ---------------------------------------------------------------- writing
 
   /// Turns rough notes or a request into a full email.
   Stream<String> compose(String notes, {String to = '', String subject = ''}) =>
-      provider.chat([
+      _writer.chat([
         AiMessage.system(_writerRules),
         AiMessage.user('Write an email based on these notes.\n'
             '${to.trim().isEmpty ? '' : 'Recipient: $to\n'}'
             '${subject.trim().isEmpty ? '' : 'Subject: $subject\n'}'
             'Notes:\n${notes.trim()}'),
-      ], model: writingModel, temperature: 0.6);
+      ], model: _writerModel, temperature: 0.6);
 
   /// Reworks an existing draft in the requested style.
-  Stream<String> rewrite(String draft, RewriteStyle style) => provider.chat([
+  Stream<String> rewrite(String draft, RewriteStyle style) => _writer.chat([
         AiMessage.system('You edit email drafts. ${style.instruction}\n'
             'Output ONLY the revised email text, with no commentary, preamble, subject line or code fences. '
             'Keep the existing greeting and sign-off; do not add a greeting, sign-off or [placeholders] that the draft does not have.'),
         AiMessage.user(draft),
-      ], model: writingModel, temperature: style == RewriteStyle.grammar ? 0.1 : 0.5);
+      ], model: _writerModel, temperature: style == RewriteStyle.grammar ? 0.1 : 0.5);
 
   /// Applies a free-form edit request, e.g. "mention the deadline is Friday".
-  Stream<String> customEdit(String draft, String request) => provider.chat([
+  Stream<String> customEdit(String draft, String request) => _writer.chat([
         AiMessage.system(
             'You edit email drafts exactly as the user asks. Output ONLY the full revised email, '
             'with no commentary, preamble or code fences.'),
         AiMessage.user('Edit request: $request\n\n--- Draft ---\n$draft'),
-      ], model: writingModel, temperature: 0.5);
+      ], model: _writerModel, temperature: 0.5);
 
   Future<String> suggestSubject(String body) async {
-    final s = await provider.complete([
+    final s = await _writer.complete([
       const AiMessage.system(
           'Write a clear, specific email subject line (max 8 words) for the email. '
           'Output only the subject text, no quotes, no "Subject:" prefix.'),
       AiMessage.user(body),
-    ], model: fastModel, temperature: 0.3);
+    ], model: writer == null ? fastModel : _writerModel, temperature: 0.3);
     return s.split('\n').first.replaceAll(RegExp(r'^(subject:\s*)|["“”]', caseSensitive: false), '').trim();
   }
 
@@ -351,11 +369,18 @@ class EmailAi {
   Stream<String> translate(String text, String target, {String? source, bool forSending = false}) async* {
     var input = text.trim();
     if (input.length > 9000) input = '${input.substring(0, 9000)}\n[…]';
-    final model = !forSending && translationModel.isNotEmpty ? translationModel : writingModel;
+    // Reading translation stays on the local engine; sending uses the writer.
+    final AiProvider p = forSending ? _writer : (local ?? provider);
+    final model = forSending
+        ? _writerModel
+        : (translationModel.isNotEmpty ? translationModel : writingModel);
     if (model.contains('translategemma')) {
-      final from = source ?? await detectLanguage(input) ?? 'English';
+      // Do not ask a cloud model to detect the language of text that must stay local.
+      final from = source ??
+          (identical(p, provider) ? await detectLanguage(input) : Languages.guess(input)) ??
+          'English';
       // TranslateGemma is trained on this exact prompt.
-      yield* provider.chat([
+      yield* p.chat([
         AiMessage.user('You are a professional $from (${Languages.code(from)}) to $target (${Languages.code(target)}) translator. '
             'Your goal is to accurately convey the meaning and nuances of the original $from text while adhering to $target grammar, vocabulary, and cultural sensitivities.\n'
             'Produce only the $target translation, without any additional explanations or commentary. '
@@ -363,7 +388,7 @@ class EmailAi {
       ], model: model, temperature: 0.1);
       return;
     }
-    yield* provider.chat([
+    yield* p.chat([
       AiMessage.system('You are a professional translator. Translate the text the user gives you into $target. '
           'Keep the meaning, tone, names, numbers, dates, links, line breaks and "- " bullets. '
           'If parts are already in $target, keep them unchanged. Output only the translation.'),

@@ -27,6 +27,10 @@ class AppSettings {
     this.indexDepth = 3000,
     this.notifications = true,
     this.groupConversations = true,
+    this.writingEngine = 'local',
+    this.assistEngine = 'local',
+    this.writingCloudModel = '',
+    this.assistCloudModel = '',
   });
 
   /// Show one row per conversation in message lists.
@@ -67,6 +71,16 @@ class AppSettings {
 
   /// Notify about new unread inbox mail.
   final bool notifications;
+  /// Where writing jobs (drafts, rewrites, subjects, digests, outgoing
+  /// translation) run: local, claudeApi, openaiApi, claudeCli, codexCli.
+  final String writingEngine;
+
+  /// Where everything else (summaries, search, triage, ...) runs.
+  final String assistEngine;
+
+  /// Model for the chosen cloud engine ('' = engine default).
+  final String writingCloudModel;
+  final String assistCloudModel;
 
   AppSettings copyWith({
     String? ollamaUrl,
@@ -87,6 +101,10 @@ class AppSettings {
     int? indexDepth,
     bool? notifications,
     bool? groupConversations,
+    String? writingEngine,
+    String? assistEngine,
+    String? writingCloudModel,
+    String? assistCloudModel,
   }) =>
       AppSettings(
         groupConversations: groupConversations ?? this.groupConversations,
@@ -107,6 +125,10 @@ class AppSettings {
         undoSendSeconds: undoSendSeconds ?? this.undoSendSeconds,
         indexDepth: indexDepth ?? this.indexDepth,
         notifications: notifications ?? this.notifications,
+        writingEngine: writingEngine ?? this.writingEngine,
+        assistEngine: assistEngine ?? this.assistEngine,
+        writingCloudModel: writingCloudModel ?? this.writingCloudModel,
+        assistCloudModel: assistCloudModel ?? this.assistCloudModel,
       );
 
   Map<String, dynamic> toJson() => {
@@ -128,6 +150,10 @@ class AppSettings {
         'indexDepth': indexDepth,
         'notifications': notifications,
         'groupConversations': groupConversations,
+        'writingEngine': writingEngine,
+        'assistEngine': assistEngine,
+        'writingCloudModel': writingCloudModel,
+        'assistCloudModel': assistCloudModel,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -149,6 +175,10 @@ class AppSettings {
         indexDepth: j['indexDepth'] as int? ?? 3000,
         notifications: j['notifications'] as bool? ?? true,
         groupConversations: j['groupConversations'] as bool? ?? true,
+        writingEngine: j['writingEngine'] as String? ?? 'local',
+        assistEngine: j['assistEngine'] as String? ?? 'local',
+        writingCloudModel: j['writingCloudModel'] as String? ?? '',
+        assistCloudModel: j['assistCloudModel'] as String? ?? '',
       );
 }
 
@@ -207,6 +237,12 @@ class SettingsStore {
     await _secure.delete(key: 'password.$accountId');
     await _secure.delete(key: 'oauth.$accountId');
   }
+
+  /// Generic secrets (API keys) in the keychain.
+  Future<String?> readSecret(String key) => _secure.read(key: key);
+  Future<void> writeSecret(String key, String value) =>
+      _secure.write(key: key, value: value);
+  Future<void> deleteSecret(String key) => _secure.delete(key: key);
 
   Future<OauthToken?> readToken(String accountId) async {
     final raw = await _secure.read(key: 'oauth.$accountId');

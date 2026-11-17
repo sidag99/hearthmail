@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import 'services/sandbox_migration.dart';
 import 'services/settings_store.dart';
 import 'state/app_state.dart';
 import 'ui/account_setup_page.dart';
@@ -10,6 +11,7 @@ import 'ui/mac_style.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await setUpMacWindow();
+  await SandboxMigration.run();
   final store = await SettingsStore.open();
   final state = AppState(store);
   runApp(ChangeNotifierProvider.value(value: state, child: const HearthmailApp()));
