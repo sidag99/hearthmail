@@ -165,6 +165,46 @@ class MailService {
         return boxes.where((b) => !b.isNotSelectable).toList();
       });
 
+  /// Special-use folders can neither be renamed nor deleted.
+  static bool isProtectedMailbox(Mailbox b) =>
+      b.isInbox ||
+      b.isSent ||
+      b.isDrafts ||
+      b.isTrash ||
+      b.isJunk ||
+      b.isArchive ||
+      b.hasFlag(MailboxFlag.all) ||
+      b.hasFlag(MailboxFlag.flagged) ||
+      b.name.toUpperCase() == 'INBOX';
+
+  /// Full IMAP path for a new folder called [name] under [parent] (or the root).
+  static String childPath(String name, Mailbox? parent) =>
+      parent == null ? name : '${parent.path}${parent.pathSeparator}$name';
+
+  /// Creates a folder (a subfolder of [parent] when given).
+  Future<Mailbox> createMailbox(String name, {Mailbox? parent}) => _serial(() async {
+        final sep = parent?.pathSeparator ?? '/';
+        if (name.contains(sep)) throw ArgumentError('A folder name cannot contain "$sep".');
+        return client.createMailbox(name, parentMailbox: parent);
+      });
+
+  /// Renames [box] within its parent folder.
+  Future<void> renameMailbox(Mailbox box, String newName) => _serial(() async {
+        if (isProtectedMailbox(box)) throw StateError('"${box.name}" is a system folder and cannot be renamed.');
+        final sep = box.pathSeparator;
+        if (newName.contains(sep)) throw ArgumentError('A folder name cannot contain "$sep".');
+        final i = box.path.lastIndexOf(sep);
+        final newPath = i < 0 ? newName : '${box.path.substring(0, i)}$sep$newName';
+        final imap = client.lowLevelIncomingMailClient as ImapClient;
+        await imap.renameMailbox(box, newPath);
+      });
+
+  /// Deletes [box] and everything in it.
+  Future<void> deleteMailbox(Mailbox box) => _serial(() async {
+        if (isProtectedMailbox(box)) throw StateError('"${box.name}" is a system folder and cannot be deleted.');
+        await client.deleteMailbox(box);
+      });
+
   /// Newest messages first. [page] starts at 1.
   Future<List<MimeMessage>> fetchPage(Mailbox box, {int page = 1, int count = 40}) => _serial(() async {
         // Always re-select so the message count is current.

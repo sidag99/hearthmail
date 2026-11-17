@@ -387,6 +387,71 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Re-reads the folder list after a folder was created, renamed or deleted.
+  Future<void> refreshMailboxes(AccountSession s) async {
+    final service = s.service;
+    if (service == null) return;
+    s.mailboxes = await service.mailboxes();
+    s.inbox = s.mailboxes.firstWhere((b) => b.isInbox, orElse: () => s.mailboxes.first);
+    notifyListeners();
+  }
+
+  /// Returns null on success, otherwise a message for the user.
+  Future<String?> createMailbox(AccountSession s, String name, {Mailbox? parent}) async {
+    final service = s.service;
+    final trimmed = name.trim();
+    if (service == null) return 'Not connected.';
+    if (trimmed.isEmpty) return 'Enter a name for the mailbox.';
+    try {
+      await service.createMailbox(trimmed, parent: parent);
+      await refreshMailboxes(s);
+      toast('Created "$trimmed"');
+      return null;
+    } catch (e) {
+      return friendlyError(e);
+    }
+  }
+
+  Future<String?> renameMailbox(AccountSession s, Mailbox box, String newName) async {
+    final service = s.service;
+    final trimmed = newName.trim();
+    if (service == null) return 'Not connected.';
+    if (MailService.isProtectedMailbox(box)) return '"${box.name}" is a system folder and cannot be renamed.';
+    if (trimmed.isEmpty) return 'Enter a name for the mailbox.';
+    try {
+      final wasOpen = folderBox?.path == box.path && folderSession == s;
+      await service.renameMailbox(box, trimmed);
+      await refreshMailboxes(s);
+      if (wasOpen) _leaveFolder(s);
+      toast('Renamed to "$trimmed"');
+      return null;
+    } catch (e) {
+      return friendlyError(e);
+    }
+  }
+
+  Future<String?> deleteMailbox(AccountSession s, Mailbox box) async {
+    final service = s.service;
+    if (service == null) return 'Not connected.';
+    if (MailService.isProtectedMailbox(box)) return '"${box.name}" is a system folder and cannot be deleted.';
+    try {
+      final wasOpen = folderBox?.path == box.path && folderSession == s;
+      await service.deleteMailbox(box);
+      await refreshMailboxes(s);
+      if (wasOpen) _leaveFolder(s);
+      toast('Deleted "${box.name}"');
+      return null;
+    } catch (e) {
+      return friendlyError(e);
+    }
+  }
+
+  /// The open folder disappeared: fall back to the inbox.
+  void _leaveFolder(AccountSession s) {
+    final inbox = s.inbox;
+    if (inbox != null) unawaited(openFolder(s, inbox));
+  }
+
   Future<void> reconnect(AccountSession s) async {
     await _connect(s);
     if (settings.autoSort) unawaited(sortInboxes());
