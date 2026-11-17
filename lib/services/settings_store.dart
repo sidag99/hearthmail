@@ -1,0 +1,207 @@
+import 'dart:convert';
+
+import 'package:enough_mail/enough_mail.dart' show OauthToken;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/account_config.dart';
+
+/// App-wide preferences (AI setup and the user's writing profile).
+class AppSettings {
+  const AppSettings({
+    this.ollamaUrl = 'http://localhost:11434',
+    this.fastModel = '',
+    this.writingModel = '',
+    this.userName = '',
+    this.styleNotes = '',
+    this.autoSort = true,
+    this.loadRemoteImages = false,
+    this.googleClientId = '',
+    this.googleClientSecret = '',
+    this.microsoftClientId = '',
+    this.embeddingModel = '',
+    this.semanticSearch = true,
+    this.translationModel = '',
+    this.myLanguage = 'English',
+    this.undoSendSeconds = 10,
+    this.indexDepth = 3000,
+  });
+
+  final String ollamaUrl;
+
+  /// Used for quick structured work: sorting, search, summaries.
+  final String fastModel;
+
+  /// Used for text you send: drafts, rewrites, digests.
+  final String writingModel;
+  final String userName;
+  final String styleNotes;
+  final bool autoSort;
+  final bool loadRemoteImages;
+
+  /// The user's own OAuth app registrations (see OAUTH_SETUP.md).
+  final String googleClientId;
+  final String googleClientSecret;
+  final String microsoftClientId;
+
+  /// Embedding model for semantic search (empty: picked automatically).
+  final String embeddingModel;
+  final bool semanticSearch;
+
+  /// Dedicated translation model (empty: use the writing model).
+  final String translationModel;
+
+  /// The language the user reads and writes in.
+  final String myLanguage;
+
+  /// How long "Undo send" waits before really sending (0 = off).
+  final int undoSendSeconds;
+
+  /// How many recent emails per account to index for semantic search.
+  final int indexDepth;
+
+  AppSettings copyWith({
+    String? ollamaUrl,
+    String? fastModel,
+    String? writingModel,
+    String? userName,
+    String? styleNotes,
+    bool? autoSort,
+    bool? loadRemoteImages,
+    String? googleClientId,
+    String? googleClientSecret,
+    String? microsoftClientId,
+    String? embeddingModel,
+    bool? semanticSearch,
+    String? translationModel,
+    String? myLanguage,
+    int? undoSendSeconds,
+    int? indexDepth,
+  }) =>
+      AppSettings(
+        ollamaUrl: ollamaUrl ?? this.ollamaUrl,
+        fastModel: fastModel ?? this.fastModel,
+        writingModel: writingModel ?? this.writingModel,
+        userName: userName ?? this.userName,
+        styleNotes: styleNotes ?? this.styleNotes,
+        autoSort: autoSort ?? this.autoSort,
+        loadRemoteImages: loadRemoteImages ?? this.loadRemoteImages,
+        googleClientId: googleClientId ?? this.googleClientId,
+        googleClientSecret: googleClientSecret ?? this.googleClientSecret,
+        microsoftClientId: microsoftClientId ?? this.microsoftClientId,
+        embeddingModel: embeddingModel ?? this.embeddingModel,
+        semanticSearch: semanticSearch ?? this.semanticSearch,
+        translationModel: translationModel ?? this.translationModel,
+        myLanguage: myLanguage ?? this.myLanguage,
+        undoSendSeconds: undoSendSeconds ?? this.undoSendSeconds,
+        indexDepth: indexDepth ?? this.indexDepth,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'ollamaUrl': ollamaUrl,
+        'fastModel': fastModel,
+        'writingModel': writingModel,
+        'userName': userName,
+        'styleNotes': styleNotes,
+        'autoSort': autoSort,
+        'loadRemoteImages': loadRemoteImages,
+        'googleClientId': googleClientId,
+        'googleClientSecret': googleClientSecret,
+        'microsoftClientId': microsoftClientId,
+        'embeddingModel': embeddingModel,
+        'semanticSearch': semanticSearch,
+        'translationModel': translationModel,
+        'myLanguage': myLanguage,
+        'undoSendSeconds': undoSendSeconds,
+        'indexDepth': indexDepth,
+      };
+
+  factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
+        ollamaUrl: j['ollamaUrl'] as String? ?? 'http://localhost:11434',
+        fastModel: j['fastModel'] as String? ?? '',
+        writingModel: j['writingModel'] as String? ?? '',
+        userName: j['userName'] as String? ?? '',
+        styleNotes: j['styleNotes'] as String? ?? '',
+        autoSort: j['autoSort'] as bool? ?? true,
+        loadRemoteImages: j['loadRemoteImages'] as bool? ?? false,
+        googleClientId: j['googleClientId'] as String? ?? '',
+        googleClientSecret: j['googleClientSecret'] as String? ?? '',
+        microsoftClientId: j['microsoftClientId'] as String? ?? '',
+        embeddingModel: j['embeddingModel'] as String? ?? '',
+        semanticSearch: j['semanticSearch'] as bool? ?? true,
+        translationModel: j['translationModel'] as String? ?? '',
+        myLanguage: j['myLanguage'] as String? ?? 'English',
+        undoSendSeconds: j['undoSendSeconds'] as int? ?? 10,
+        indexDepth: j['indexDepth'] as int? ?? 3000,
+      );
+}
+
+/// Persists settings and accounts. Passwords go to the OS keychain.
+class SettingsStore {
+  SettingsStore._(this._prefs);
+
+  static Future<SettingsStore> open() async =>
+      SettingsStore._(await SharedPreferences.getInstance());
+
+  final SharedPreferences _prefs;
+
+  static const _secure = FlutterSecureStorage(
+    // The classic login keychain works for unsigned/local builds, where the
+    // newer data-protection keychain would need a paid developer signature.
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+  );
+
+  static const _settingsKey = 'settings.v1';
+  static const _accountsKey = 'accounts.v1';
+
+  AppSettings loadSettings() {
+    final raw = _prefs.getString(_settingsKey);
+    if (raw == null) return const AppSettings();
+    try {
+      return AppSettings.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return const AppSettings();
+    }
+  }
+
+  Future<void> saveSettings(AppSettings s) =>
+      _prefs.setString(_settingsKey, jsonEncode(s.toJson()));
+
+  List<AccountConfig> loadAccounts() {
+    final raw = _prefs.getString(_accountsKey);
+    if (raw == null) return [];
+    try {
+      return [
+        for (final a in jsonDecode(raw) as List)
+          AccountConfig.fromJson(a as Map<String, dynamic>)
+      ];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveAccounts(List<AccountConfig> accounts) => _prefs.setString(
+      _accountsKey, jsonEncode([for (final a in accounts) a.toJson()]));
+
+  Future<String?> readPassword(String accountId) =>
+      _secure.read(key: 'password.$accountId');
+  Future<void> writePassword(String accountId, String password) =>
+      _secure.write(key: 'password.$accountId', value: password);
+  Future<void> deletePassword(String accountId) async {
+    await _secure.delete(key: 'password.$accountId');
+    await _secure.delete(key: 'oauth.$accountId');
+  }
+
+  Future<OauthToken?> readToken(String accountId) async {
+    final raw = await _secure.read(key: 'oauth.$accountId');
+    if (raw == null) return null;
+    try {
+      return OauthToken.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> writeToken(String accountId, OauthToken token) =>
+      _secure.write(key: 'oauth.$accountId', value: jsonEncode(token.toJson()));
+}
