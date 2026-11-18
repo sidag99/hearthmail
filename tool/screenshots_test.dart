@@ -94,6 +94,10 @@ Future<void> loadFonts() async {
   }
   await roboto.load();
   await (FontLoader('MaterialIcons')..addFont(f('MaterialIcons-Regular.otf'))).load();
+  // Apple-style icons used across the UI (bundled by the cupertino_icons package).
+  await (FontLoader('packages/cupertino_icons/CupertinoIcons')
+        ..addFont(rootBundle.load('packages/cupertino_icons/assets/CupertinoIcons.ttf')))
+      .load();
 }
 
 Future<void> snap(WidgetTester tester, String name) async {
