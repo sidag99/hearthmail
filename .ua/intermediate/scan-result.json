@@ -1,0 +1,454 @@
+{
+ "name": "hearthmail",
+ "description": "Hearthmail is a cross-platform Flutter email client (macOS first) for any IMAP/SMTP account, with a private AI assistant \u2014 smart inbox sorting, summaries, reply drafting, natural-language and semantic search, translation \u2014 that runs entirely on local models through Ollama.",
+ "languages": [
+  "dart",
+  "entitlements",
+  "example",
+  "markdown",
+  "xcconfig",
+  "xml",
+  "yaml"
+ ],
+ "frameworks": [
+  "Flutter",
+  "Provider",
+  "enough_mail",
+  "Ollama"
+ ],
+ "files": [
+  {
+   "path": "FEATURES.md",
+   "language": "markdown",
+   "sizeLines": 91,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "OAUTH_SETUP.md",
+   "language": "markdown",
+   "sizeLines": 93,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "README.md",
+   "language": "markdown",
+   "sizeLines": 109,
+   "fileCategory": "docs"
+  },
+  {
+   "path": "analysis_options.yaml",
+   "language": "yaml",
+   "sizeLines": 36,
+   "fileCategory": "config"
+  },
+  {
+   "path": "android/app/src/main/AndroidManifest.xml",
+   "language": "xml",
+   "sizeLines": 47,
+   "fileCategory": "config"
+  },
+  {
+   "path": "ios/Runner/Info.plist",
+   "language": "xml",
+   "sizeLines": 70,
+   "fileCategory": "config"
+  },
+  {
+   "path": "lib/main.dart",
+   "language": "dart",
+   "sizeLines": 49,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/models/account_config.dart",
+   "language": "dart",
+   "sizeLines": 138,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/models/email_content.dart",
+   "language": "dart",
+   "sizeLines": 44,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/models/search_plan.dart",
+   "language": "dart",
+   "sizeLines": 144,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/models/triage.dart",
+   "language": "dart",
+   "sizeLines": 63,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/ai/ai_provider.dart",
+   "language": "dart",
+   "sizeLines": 88,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/ai/email_ai.dart",
+   "language": "dart",
+   "sizeLines": 554,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/ai/ollama_provider.dart",
+   "language": "dart",
+   "sizeLines": 134,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/email_html.dart",
+   "language": "dart",
+   "sizeLines": 301,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/html_text.dart",
+   "language": "dart",
+   "sizeLines": 63,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/mail_service.dart",
+   "language": "dart",
+   "sizeLines": 574,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/oauth.dart",
+   "language": "dart",
+   "sizeLines": 237,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/settings_store.dart",
+   "language": "dart",
+   "sizeLines": 207,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/triage_cache.dart",
+   "language": "dart",
+   "sizeLines": 54,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/user_data.dart",
+   "language": "dart",
+   "sizeLines": 228,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/services/vector_index.dart",
+   "language": "dart",
+   "sizeLines": 268,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/state/app_state.dart",
+   "language": "dart",
+   "sizeLines": 1720,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/ui/account_setup_page.dart",
+   "language": "dart",
+   "sizeLines": 719,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/ui/compose_page.dart",
+   "language": "dart",
+   "sizeLines": 850,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/ui/email_web_view.dart",
+   "language": "dart",
+   "sizeLines": 89,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/ui/home_page.dart",
+   "language": "dart",
+   "sizeLines": 178,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/ui/message_list.dart",
+   "language": "dart",
+   "sizeLines": 563,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/ui/message_view.dart",
+   "language": "dart",
+   "sizeLines": 824,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/ui/settings_page.dart",
+   "language": "dart",
+   "sizeLines": 364,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/ui/sidebar.dart",
+   "language": "dart",
+   "sizeLines": 289,
+   "fileCategory": "code"
+  },
+  {
+   "path": "lib/ui/widgets/ai_widgets.dart",
+   "language": "dart",
+   "sizeLines": 188,
+   "fileCategory": "code"
+  },
+  {
+   "path": "macos/Runner/Configs/AppInfo.xcconfig",
+   "language": "xcconfig",
+   "sizeLines": 16,
+   "fileCategory": "code"
+  },
+  {
+   "path": "macos/Runner/Configs/Signing.xcconfig.example",
+   "language": "example",
+   "sizeLines": 6,
+   "fileCategory": "code"
+  },
+  {
+   "path": "macos/Runner/DebugProfile.entitlements",
+   "language": "entitlements",
+   "sizeLines": 18,
+   "fileCategory": "code"
+  },
+  {
+   "path": "macos/Runner/Info.plist",
+   "language": "xml",
+   "sizeLines": 32,
+   "fileCategory": "config"
+  },
+  {
+   "path": "macos/Runner/Release.entitlements",
+   "language": "entitlements",
+   "sizeLines": 16,
+   "fileCategory": "code"
+  },
+  {
+   "path": "pubspec.yaml",
+   "language": "yaml",
+   "sizeLines": 104,
+   "fileCategory": "config"
+  },
+  {
+   "path": "test/features_test.dart",
+   "language": "dart",
+   "sizeLines": 152,
+   "fileCategory": "code"
+  },
+  {
+   "path": "test/oauth_test.dart",
+   "language": "dart",
+   "sizeLines": 158,
+   "fileCategory": "code"
+  },
+  {
+   "path": "test/widget_test.dart",
+   "language": "dart",
+   "sizeLines": 78,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tool/ai_smoke.dart",
+   "language": "dart",
+   "sizeLines": 106,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tool/model_bench.dart",
+   "language": "dart",
+   "sizeLines": 333,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tool/screenshots_test.dart",
+   "language": "dart",
+   "sizeLines": 287,
+   "fileCategory": "code"
+  }
+ ],
+ "totalFiles": 44,
+ "filteredByIgnore": 70,
+ "estimatedComplexity": "moderate",
+ "importMap": {
+  "FEATURES.md": [],
+  "OAUTH_SETUP.md": [],
+  "README.md": [],
+  "analysis_options.yaml": [],
+  "android/app/src/main/AndroidManifest.xml": [],
+  "ios/Runner/Info.plist": [],
+  "lib/main.dart": [
+   "lib/services/settings_store.dart",
+   "lib/state/app_state.dart",
+   "lib/ui/account_setup_page.dart",
+   "lib/ui/home_page.dart"
+  ],
+  "lib/models/account_config.dart": [],
+  "lib/models/email_content.dart": [],
+  "lib/models/search_plan.dart": [],
+  "lib/models/triage.dart": [],
+  "lib/services/ai/ai_provider.dart": [],
+  "lib/services/ai/email_ai.dart": [
+   "lib/models/email_content.dart",
+   "lib/models/search_plan.dart",
+   "lib/models/triage.dart",
+   "lib/services/ai/ai_provider.dart"
+  ],
+  "lib/services/ai/ollama_provider.dart": [
+   "lib/services/ai/ai_provider.dart"
+  ],
+  "lib/services/email_html.dart": [],
+  "lib/services/html_text.dart": [],
+  "lib/services/mail_service.dart": [
+   "lib/models/account_config.dart",
+   "lib/models/email_content.dart",
+   "lib/models/search_plan.dart",
+   "lib/services/html_text.dart",
+   "lib/services/oauth.dart"
+  ],
+  "lib/services/oauth.dart": [
+   "lib/models/account_config.dart"
+  ],
+  "lib/services/settings_store.dart": [
+   "lib/models/account_config.dart"
+  ],
+  "lib/services/triage_cache.dart": [
+   "lib/models/triage.dart"
+  ],
+  "lib/services/user_data.dart": [],
+  "lib/services/vector_index.dart": [
+   "lib/models/email_content.dart"
+  ],
+  "lib/state/app_state.dart": [
+   "lib/models/account_config.dart",
+   "lib/models/email_content.dart",
+   "lib/models/search_plan.dart",
+   "lib/models/triage.dart",
+   "lib/services/ai/ai_provider.dart",
+   "lib/services/ai/email_ai.dart",
+   "lib/services/ai/ollama_provider.dart",
+   "lib/services/mail_service.dart",
+   "lib/services/oauth.dart",
+   "lib/services/settings_store.dart",
+   "lib/services/triage_cache.dart",
+   "lib/services/user_data.dart",
+   "lib/services/vector_index.dart"
+  ],
+  "lib/ui/account_setup_page.dart": [
+   "lib/models/account_config.dart",
+   "lib/services/mail_service.dart",
+   "lib/services/settings_store.dart",
+   "lib/state/app_state.dart"
+  ],
+  "lib/ui/compose_page.dart": [
+   "lib/services/ai/email_ai.dart",
+   "lib/services/mail_service.dart",
+   "lib/services/user_data.dart",
+   "lib/state/app_state.dart",
+   "lib/ui/message_view.dart",
+   "lib/ui/sidebar.dart"
+  ],
+  "lib/ui/email_web_view.dart": [],
+  "lib/ui/home_page.dart": [
+   "lib/services/mail_service.dart",
+   "lib/state/app_state.dart",
+   "lib/ui/compose_page.dart",
+   "lib/ui/message_list.dart",
+   "lib/ui/message_view.dart",
+   "lib/ui/settings_page.dart",
+   "lib/ui/sidebar.dart",
+   "lib/ui/widgets/ai_widgets.dart"
+  ],
+  "lib/ui/message_list.dart": [
+   "lib/models/triage.dart",
+   "lib/services/mail_service.dart",
+   "lib/services/user_data.dart",
+   "lib/state/app_state.dart",
+   "lib/ui/compose_page.dart",
+   "lib/ui/message_view.dart",
+   "lib/ui/sidebar.dart",
+   "lib/ui/widgets/ai_widgets.dart"
+  ],
+  "lib/ui/message_view.dart": [
+   "lib/services/ai/email_ai.dart",
+   "lib/services/email_html.dart",
+   "lib/services/mail_service.dart",
+   "lib/state/app_state.dart",
+   "lib/ui/compose_page.dart",
+   "lib/ui/email_web_view.dart",
+   "lib/ui/sidebar.dart",
+   "lib/ui/widgets/ai_widgets.dart"
+  ],
+  "lib/ui/settings_page.dart": [
+   "lib/models/account_config.dart",
+   "lib/services/ai/email_ai.dart",
+   "lib/services/settings_store.dart",
+   "lib/state/app_state.dart",
+   "lib/ui/account_setup_page.dart"
+  ],
+  "lib/ui/sidebar.dart": [
+   "lib/models/account_config.dart",
+   "lib/models/triage.dart",
+   "lib/state/app_state.dart",
+   "lib/ui/account_setup_page.dart"
+  ],
+  "lib/ui/widgets/ai_widgets.dart": [],
+  "macos/Runner/Configs/AppInfo.xcconfig": [],
+  "macos/Runner/Configs/Signing.xcconfig.example": [],
+  "macos/Runner/DebugProfile.entitlements": [],
+  "macos/Runner/Info.plist": [],
+  "macos/Runner/Release.entitlements": [],
+  "pubspec.yaml": [],
+  "test/features_test.dart": [
+   "lib/models/email_content.dart",
+   "lib/services/ai/email_ai.dart",
+   "lib/services/email_html.dart",
+   "lib/services/mail_service.dart",
+   "lib/services/user_data.dart",
+   "lib/services/vector_index.dart"
+  ],
+  "test/oauth_test.dart": [
+   "lib/models/account_config.dart",
+   "lib/services/oauth.dart"
+  ],
+  "test/widget_test.dart": [
+   "lib/models/search_plan.dart",
+   "lib/services/ai/email_ai.dart",
+   "lib/services/html_text.dart",
+   "lib/services/mail_service.dart"
+  ],
+  "tool/ai_smoke.dart": [
+   "lib/models/email_content.dart",
+   "lib/services/ai/email_ai.dart",
+   "lib/services/ai/ollama_provider.dart"
+  ],
+  "tool/model_bench.dart": [],
+  "tool/screenshots_test.dart": [
+   "lib/main.dart",
+   "lib/models/account_config.dart",
+   "lib/models/triage.dart",
+   "lib/services/ai/ai_provider.dart",
+   "lib/services/ai/email_ai.dart",
+   "lib/services/mail_service.dart",
+   "lib/services/settings_store.dart",
+   "lib/state/app_state.dart",
+   "lib/ui/account_setup_page.dart",
+   "lib/ui/compose_page.dart"
+  ]
+ }
+}
