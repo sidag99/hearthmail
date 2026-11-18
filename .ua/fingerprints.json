@@ -1,0 +1,5006 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "200b914d9b55bc5d3ec24711e4b0a62e466f4ec3",
+  "generatedAt": "2026-11-18T11:16:02.730Z",
+  "files": {
+    "FEATURES.md": {
+      "filePath": "FEATURES.md",
+      "contentHash": "909d80ab971c755d1bb209da2b1df74fe647138dde0cc049a5c0dbfa8c592ea7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 92,
+      "hasStructuralAnalysis": false
+    },
+    "OAUTH_SETUP.md": {
+      "filePath": "OAUTH_SETUP.md",
+      "contentHash": "b14900564c5dbc526f82a398df65440b26998d6d4b477a99ce16718e5c76c0ed",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 94,
+      "hasStructuralAnalysis": false
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "84789cee876172e67f2d09a4336c8b098263db374cadade55c7280097f1e781f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 110,
+      "hasStructuralAnalysis": false
+    },
+    "analysis_options.yaml": {
+      "filePath": "analysis_options.yaml",
+      "contentHash": "4f5eadd4510f1201b229fbaeb707f4c24d52ed692c11a63c1c95deae0513f1a9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 37,
+      "hasStructuralAnalysis": false
+    },
+    "android/app/src/main/AndroidManifest.xml": {
+      "filePath": "android/app/src/main/AndroidManifest.xml",
+      "contentHash": "4cbb0c7aa883ccb368b2aaf63ea917397caf6820df966a6ce6dab30fdd9b5e5b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 48,
+      "hasStructuralAnalysis": false
+    },
+    "ios/Runner/Info.plist": {
+      "filePath": "ios/Runner/Info.plist",
+      "contentHash": "ee261a664666a766d124b613cd296fc4b98ccc37a8741e94a27028c967232211",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 71,
+      "hasStructuralAnalysis": false
+    },
+    "lib/main.dart": {
+      "filePath": "lib/main.dart",
+      "contentHash": "148bfdba2df2fa44c7cb4ad51422c048b666057d3a95bd3913eb9426960ba84d",
+      "functions": [
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "buildTheme",
+          "params": [
+            "b"
+          ],
+          "returnType": "ThemeData",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "HearthmailApp",
+          "methods": [
+            "buildTheme",
+            "build"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 32
+        }
+      ],
+      "imports": [
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:provider/provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "services/settings_store.dart",
+          "specifiers": []
+        },
+        {
+          "source": "state/app_state.dart",
+          "specifiers": []
+        },
+        {
+          "source": "ui/account_setup_page.dart",
+          "specifiers": []
+        },
+        {
+          "source": "ui/home_page.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "main",
+        "buildTheme",
+        "build",
+        "HearthmailApp"
+      ],
+      "totalLines": 50,
+      "hasStructuralAnalysis": true
+    },
+    "lib/models/account_config.dart": {
+      "filePath": "lib/models/account_config.dart",
+      "contentHash": "b0132273974457144e732b88f690a5c17882c299a3cd6ce36960abbedb12fdb3",
+      "functions": [
+        {
+          "name": "loginName",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "smtpUsesStartTls",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "imapUsesStartTls",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "isGmail",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "toJson",
+          "params": [],
+          "returnType": "Map<String, dynamic>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "AccountConfig.fromJson",
+          "params": [
+            "j"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "forEmail",
+          "params": [
+            "email"
+          ],
+          "returnType": "ProviderPreset",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "AuthType",
+          "methods": [],
+          "properties": [
+            "password",
+            "google",
+            "microsoft"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "AccountConfig",
+          "methods": [
+            "loginName",
+            "smtpUsesStartTls",
+            "imapUsesStartTls",
+            "isGmail",
+            "toJson",
+            "AccountConfig.fromJson"
+          ],
+          "properties": [
+            "id",
+            "authType",
+            "email",
+            "displayName",
+            "imapHost",
+            "imapPort",
+            "smtpHost",
+            "smtpPort",
+            "username"
+          ],
+          "exported": true,
+          "lineCount": 62
+        },
+        {
+          "name": "ProviderPreset",
+          "methods": [
+            "forEmail"
+          ],
+          "properties": [
+            "name",
+            "imapHost",
+            "imapPort",
+            "smtpHost",
+            "smtpPort",
+            "domains",
+            "passwordHelp",
+            "passwordUrl"
+          ],
+          "exported": true,
+          "lineCount": 69
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "AuthType",
+        "loginName",
+        "smtpUsesStartTls",
+        "imapUsesStartTls",
+        "isGmail",
+        "toJson",
+        "AccountConfig.fromJson",
+        "AccountConfig",
+        "forEmail",
+        "ProviderPreset"
+      ],
+      "totalLines": 139,
+      "hasStructuralAnalysis": true
+    },
+    "lib/models/email_content.dart": {
+      "filePath": "lib/models/email_content.dart",
+      "contentHash": "b3c319d56ff11b0b4123d2fce5bd216b81fd5ec503c24c2aee958a319a09c448",
+      "functions": [
+        {
+          "name": "snippet",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "forPrompt",
+          "params": [
+            "maxBodyChars"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "EmailContent",
+          "methods": [
+            "snippet",
+            "forPrompt"
+          ],
+          "properties": [
+            "id",
+            "from",
+            "to",
+            "subject",
+            "date",
+            "body",
+            "isUnread"
+          ],
+          "exported": true,
+          "lineCount": 42
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "snippet",
+        "forPrompt",
+        "EmailContent"
+      ],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
+    "lib/models/search_plan.dart": {
+      "filePath": "lib/models/search_plan.dart",
+      "contentHash": "388373c55571099e8e4bc19a4b8a8207d0ffc3bfe77b42d3f9542269bd40bf77",
+      "functions": [
+        {
+          "name": "SearchPlan.fromJson",
+          "params": [
+            "j"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "withoutKeywords",
+          "params": [],
+          "returnType": "SearchPlan",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "isEmpty",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "describe",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "toImapCriteria",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "toGmailQuery",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_q",
+          "params": [
+            "s"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_g",
+          "params": [
+            "s"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_imapDate",
+          "params": [
+            "d"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_ymd",
+          "params": [
+            "d",
+            "sep"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "SearchPlan",
+          "methods": [
+            "SearchPlan.fromJson",
+            "withoutKeywords",
+            "isEmpty",
+            "describe",
+            "toImapCriteria",
+            "toGmailQuery",
+            "_q",
+            "_g",
+            "_imapDate",
+            "_ymd"
+          ],
+          "properties": [
+            "keywords",
+            "from",
+            "to",
+            "subject",
+            "since",
+            "before",
+            "unreadOnly",
+            "flaggedOnly",
+            "hasAttachment"
+          ],
+          "exported": true,
+          "lineCount": 142
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "SearchPlan.fromJson",
+        "withoutKeywords",
+        "isEmpty",
+        "describe",
+        "toImapCriteria",
+        "toGmailQuery",
+        "SearchPlan"
+      ],
+      "totalLines": 145,
+      "hasStructuralAnalysis": true
+    },
+    "lib/models/triage.dart": {
+      "filePath": "lib/models/triage.dart",
+      "contentHash": "bb7b2d1d79bde4aaa64522939d775dacbdd881b189f2a00aaaf356c318cfa4e0",
+      "functions": [],
+      "classes": [
+        {
+          "name": "MailCategory",
+          "methods": [],
+          "properties": [
+            "personal"
+          ],
+          "exported": true,
+          "lineCount": 2
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "MailCategory"
+      ],
+      "totalLines": 64,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/ai/ai_provider.dart": {
+      "filePath": "lib/services/ai/ai_provider.dart",
+      "contentHash": "bd9dbc1262bef7cc9ec60d35b98d72d0de5f5b3ebfb636ca7d14ae042a114657",
+      "functions": [
+        {
+          "name": "name",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "listModels",
+          "params": [],
+          "returnType": "Future<List<String>>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "chat",
+          "params": [
+            "messages",
+            "model",
+            "temperature",
+            "jsonSchema"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "embed",
+          "params": [
+            "inputs",
+            "model"
+          ],
+          "returnType": "Future<List<List<double>>>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "close",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "AiException",
+          "params": [
+            "message"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "toString",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "complete",
+          "params": [
+            "messages",
+            "model",
+            "temperature"
+          ],
+          "returnType": "Future<String>",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "completeJson",
+          "params": [
+            "messages",
+            "model",
+            "schema",
+            "temperature"
+          ],
+          "returnType": "Future<Map<String, dynamic>>",
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "classes": [
+        {
+          "name": "AiProvider",
+          "methods": [
+            "name",
+            "listModels",
+            "chat",
+            "embed",
+            "close"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "AiRole",
+          "methods": [],
+          "properties": [
+            "system",
+            "user",
+            "assistant"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "AiMessage",
+          "methods": [],
+          "properties": [
+            "role",
+            "content"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "AiException",
+          "methods": [
+            "AiException",
+            "toString"
+          ],
+          "properties": [
+            "message"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "AiProviderHelpers",
+          "methods": [
+            "complete",
+            "completeJson"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 42
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "name",
+        "listModels",
+        "chat",
+        "embed",
+        "close",
+        "AiProvider",
+        "AiRole",
+        "AiMessage",
+        "AiException",
+        "toString",
+        "AiException",
+        "complete",
+        "completeJson",
+        "AiProviderHelpers"
+      ],
+      "totalLines": 89,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/ai/email_ai.dart": {
+      "filePath": "lib/services/ai/email_ai.dart",
+      "contentHash": "910b3ebecd55b41297a3766b9ac557ff079f464c112621d5c060ef61e348cd22",
+      "functions": [
+        {
+          "name": "EmailAi",
+          "params": [
+            "provider",
+            "fastModel",
+            "writingModel",
+            "userName",
+            "styleNotes",
+            "translationModel",
+            "embeddingModel",
+            "clock"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_firstName",
+          "params": [],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_writerRules",
+          "params": [],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "summarize",
+          "params": [
+            "email"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "digest",
+          "params": [
+            "emails"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "quickReplies",
+          "params": [
+            "email"
+          ],
+          "returnType": "Future<List<String>>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "draftReply",
+          "params": [
+            "email",
+            "instruction"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "compose",
+          "params": [
+            "notes",
+            "to",
+            "subject"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "rewrite",
+          "params": [
+            "draft",
+            "style"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "customEdit",
+          "params": [
+            "draft",
+            "request"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "suggestSubject",
+          "params": [
+            "body"
+          ],
+          "returnType": "Future<String>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "triage",
+          "params": [
+            "emails"
+          ],
+          "returnType": "Future<Map<String, Triage>>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "planSearch",
+          "params": [
+            "query"
+          ],
+          "returnType": "Future<SearchPlan>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "rankResults",
+          "params": [
+            "query",
+            "candidates"
+          ],
+          "returnType": "Future<List<String>>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "answerFromEmails",
+          "params": [
+            "question",
+            "emails"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "detectLanguage",
+          "params": [
+            "text"
+          ],
+          "returnType": "Future<String?>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "translate",
+          "params": [
+            "text",
+            "target",
+            "source",
+            "forSending"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "extractEvent",
+          "params": [
+            "email"
+          ],
+          "returnType": "Future<EmailEvent?>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "cleanDraft",
+          "params": [
+            "text"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_today",
+          "params": [],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_weekday",
+          "params": [],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_ymd",
+          "params": [
+            "d"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "toIcs",
+          "params": [
+            "description"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "code",
+          "params": [
+            "language"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "guess",
+          "params": [
+            "text"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "RewriteStyle",
+          "methods": [],
+          "properties": [
+            "improve"
+          ],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "EmailAi",
+          "methods": [
+            "EmailAi",
+            "_firstName",
+            "_writerRules",
+            "summarize",
+            "digest",
+            "quickReplies",
+            "draftReply",
+            "compose",
+            "rewrite",
+            "customEdit",
+            "suggestSubject",
+            "triage",
+            "planSearch",
+            "rankResults",
+            "answerFromEmails",
+            "detectLanguage",
+            "translate",
+            "extractEvent",
+            "cleanDraft",
+            "_today",
+            "_weekday",
+            "_ymd"
+          ],
+          "properties": [
+            "translationModel",
+            "embeddingModel",
+            "provider",
+            "fastModel",
+            "writingModel",
+            "userName",
+            "styleNotes",
+            "_now"
+          ],
+          "exported": true,
+          "lineCount": 404
+        },
+        {
+          "name": "EmailEvent",
+          "methods": [
+            "toIcs"
+          ],
+          "properties": [
+            "title",
+            "start",
+            "end",
+            "allDay",
+            "location"
+          ],
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "Languages",
+          "methods": [
+            "code",
+            "guess"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 88
+        }
+      ],
+      "imports": [
+        {
+          "source": "../../models/email_content.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../../models/search_plan.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../../models/triage.dart",
+          "specifiers": []
+        },
+        {
+          "source": "ai_provider.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "RewriteStyle",
+        "EmailAi",
+        "summarize",
+        "digest",
+        "quickReplies",
+        "draftReply",
+        "compose",
+        "rewrite",
+        "customEdit",
+        "suggestSubject",
+        "triage",
+        "planSearch",
+        "rankResults",
+        "answerFromEmails",
+        "detectLanguage",
+        "translate",
+        "extractEvent",
+        "cleanDraft",
+        "EmailAi",
+        "toIcs",
+        "EmailEvent",
+        "code",
+        "guess",
+        "Languages"
+      ],
+      "totalLines": 555,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/ai/ollama_provider.dart": {
+      "filePath": "lib/services/ai/ollama_provider.dart",
+      "contentHash": "c40280cb61cb331f856361a60e1094353ddd610edefacc62d211a8e82a5b31af",
+      "functions": [
+        {
+          "name": "OllamaProvider",
+          "params": [
+            "baseUrl",
+            "client"
+          ],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "name",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_uri",
+          "params": [
+            "path"
+          ],
+          "returnType": "Uri",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "listModels",
+          "params": [],
+          "returnType": "Future<List<String>>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "chat",
+          "params": [
+            "messages",
+            "model",
+            "temperature",
+            "jsonSchema"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "embed",
+          "params": [
+            "inputs",
+            "model"
+          ],
+          "returnType": "Future<List<List<double>>>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_errorText",
+          "params": [
+            "body",
+            "status",
+            "model"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "close",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "OllamaProvider",
+          "methods": [
+            "OllamaProvider",
+            "name",
+            "_uri",
+            "listModels",
+            "chat",
+            "embed",
+            "_errorText",
+            "close"
+          ],
+          "properties": [
+            "baseUrl",
+            "_client"
+          ],
+          "exported": true,
+          "lineCount": 125
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:async",
+          "specifiers": []
+        },
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        },
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "package:http/http.dart",
+          "specifiers": [
+            "http"
+          ]
+        },
+        {
+          "source": "ai_provider.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "OllamaProvider",
+        "name",
+        "listModels",
+        "chat",
+        "embed",
+        "close",
+        "OllamaProvider"
+      ],
+      "totalLines": 135,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/email_html.dart": {
+      "filePath": "lib/services/email_html.dart",
+      "contentHash": "546d82edebcf4aad3c634ecdc8862d11b90d41af7553a013a1f6e0b40e839e7e",
+      "functions": [
+        {
+          "name": "EmailDocument._",
+          "params": [
+            "html",
+            "blockedImages"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_nonce",
+          "params": [],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_csp",
+          "params": [
+            "nonce",
+            "allowRemote"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_fitScript",
+          "params": [
+            "nonce"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "fromHtml",
+          "params": [
+            "source",
+            "allowRemote",
+            "inlineImage"
+          ],
+          "returnType": "EmailDocument",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "fromPlain",
+          "params": [
+            "text",
+            "dark"
+          ],
+          "returnType": "EmailDocument",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_linkify",
+          "params": [
+            "escapedLine"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "plainToHtml",
+          "params": [
+            "text"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_foldQuotes",
+          "params": [
+            "doc"
+          ],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "nextNode",
+          "params": [],
+          "returnType": "domNode",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "EmailDocument",
+          "methods": [
+            "EmailDocument._",
+            "_nonce",
+            "_csp",
+            "_fitScript",
+            "fromHtml",
+            "fromPlain",
+            "_linkify",
+            "plainToHtml",
+            "_foldQuotes"
+          ],
+          "properties": [
+            "html",
+            "blockedImages"
+          ],
+          "exported": true,
+          "lineCount": 277
+        },
+        {
+          "name": "on dom",
+          "methods": [
+            "nextNode"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        },
+        {
+          "source": "dart:math",
+          "specifiers": []
+        },
+        {
+          "source": "package:html/dom.dart",
+          "specifiers": [
+            "dom"
+          ]
+        },
+        {
+          "source": "package:html/parser.dart",
+          "specifiers": [
+            "html_parser"
+          ]
+        }
+      ],
+      "exports": [
+        "EmailDocument._",
+        "fromHtml",
+        "fromPlain",
+        "plainToHtml",
+        "EmailDocument",
+        "nextNode",
+        "on dom"
+      ],
+      "totalLines": 302,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/html_text.dart": {
+      "filePath": "lib/services/html_text.dart",
+      "contentHash": "69cf1695a9a5cd9d2c4935ccd3f8abf6dbc57bf0d1ad6cbfc94ef4f19be76dd3",
+      "functions": [
+        {
+          "name": "htmlToText",
+          "params": [
+            "html"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "blockRemoteImages",
+          "params": [
+            "html"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "package:html/dom.dart",
+          "specifiers": [
+            "dom"
+          ]
+        },
+        {
+          "source": "package:html/parser.dart",
+          "specifiers": [
+            "html_parser"
+          ]
+        }
+      ],
+      "exports": [
+        "htmlToText",
+        "blockRemoteImages"
+      ],
+      "totalLines": 64,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/mail_service.dart": {
+      "filePath": "lib/services/mail_service.dart",
+      "contentHash": "043a086a183965ed71f12a48060f31b3f9ec7cbe9a8fc40c5deda0b3e7730eb3",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "dart:math",
+          "specifiers": []
+        },
+        {
+          "source": "package:enough_mail/enough_mail.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:markdown/markdown.dart",
+          "specifiers": [
+            "md"
+          ]
+        },
+        {
+          "source": "../models/account_config.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/email_content.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/search_plan.dart",
+          "specifiers": []
+        },
+        {
+          "source": "html_text.dart",
+          "specifiers": []
+        },
+        {
+          "source": "oauth.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [],
+      "totalLines": 575,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/oauth.dart": {
+      "filePath": "lib/services/oauth.dart",
+      "contentHash": "cf27e599507872b5c1255f1c7f43f0189e6776fe2ac2107af2638e7b81a9b9aa",
+      "functions": [
+        {
+          "name": "OAuthClient.google",
+          "params": [
+            "clientId",
+            "clientSecret",
+            "httpClient",
+            "openBrowser"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "OAuthClient.microsoft",
+          "params": [
+            "clientId",
+            "httpClient",
+            "openBrowser"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "_google",
+          "params": [],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_authUrl",
+          "params": [],
+          "returnType": "Uri",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_tokenUrl",
+          "params": [],
+          "returnType": "Uri",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_scopes",
+          "params": [],
+          "returnType": "List<String>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "servers",
+          "params": [],
+          "returnType": "\n  ({String imapHost, int imapPort, String smtpHost, int smtpPort})",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "signIn",
+          "params": [
+            "loginHint"
+          ],
+          "returnType": "Future<OAuthResult>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "refresh",
+          "params": [
+            "refreshToken"
+          ],
+          "returnType": "Future<OauthToken>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_post",
+          "params": [
+            "body"
+          ],
+          "returnType": "Future<Map<String, dynamic>>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_token",
+          "params": [
+            "j",
+            "fallbackRefresh"
+          ],
+          "returnType": "OauthToken",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_idClaims",
+          "params": [
+            "idToken"
+          ],
+          "returnType": "Map<String, dynamic>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_describeError",
+          "params": [
+            "code",
+            "description"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_randomString",
+          "params": [
+            "length"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "OAuthException",
+          "params": [
+            "message"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "toString",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "OAuthClient",
+          "methods": [
+            "OAuthClient.google",
+            "OAuthClient.microsoft",
+            "_google",
+            "_authUrl",
+            "_tokenUrl",
+            "_scopes",
+            "servers",
+            "signIn",
+            "refresh",
+            "_post",
+            "_token",
+            "_idClaims",
+            "_describeError",
+            "_randomString"
+          ],
+          "properties": [
+            "_http",
+            "openBrowser",
+            "kind",
+            "clientId",
+            "clientSecret"
+          ],
+          "exported": true,
+          "lineCount": 205
+        },
+        {
+          "name": "OAuthResult",
+          "methods": [],
+          "properties": [
+            "token",
+            "email",
+            "name"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "OAuthException",
+          "methods": [
+            "OAuthException",
+            "toString"
+          ],
+          "properties": [
+            "message"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:async",
+          "specifiers": []
+        },
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        },
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "dart:math",
+          "specifiers": []
+        },
+        {
+          "source": "package:crypto/crypto.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:enough_mail/enough_mail.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:http/http.dart",
+          "specifiers": [
+            "http"
+          ]
+        },
+        {
+          "source": "package:url_launcher/url_launcher.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/account_config.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "OAuthClient.google",
+        "OAuthClient.microsoft",
+        "servers",
+        "signIn",
+        "refresh",
+        "OAuthClient",
+        "OAuthResult",
+        "OAuthException",
+        "toString",
+        "OAuthException"
+      ],
+      "totalLines": 238,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/settings_store.dart": {
+      "filePath": "lib/services/settings_store.dart",
+      "contentHash": "5f08f649235c9fb8af6f087ff70a2c86c41a3941febc3375c6783acd9cf98115",
+      "functions": [
+        {
+          "name": "copyWith",
+          "params": [
+            "ollamaUrl",
+            "fastModel",
+            "writingModel",
+            "userName",
+            "styleNotes",
+            "autoSort",
+            "loadRemoteImages",
+            "googleClientId",
+            "googleClientSecret",
+            "microsoftClientId",
+            "embeddingModel",
+            "semanticSearch",
+            "translationModel",
+            "myLanguage",
+            "undoSendSeconds",
+            "indexDepth"
+          ],
+          "returnType": "AppSettings",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "toJson",
+          "params": [],
+          "returnType": "Map<String, dynamic>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "AppSettings.fromJson",
+          "params": [
+            "j"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "SettingsStore._",
+          "params": [
+            "_prefs"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "open",
+          "params": [],
+          "returnType": "Future<SettingsStore>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "loadSettings",
+          "params": [],
+          "returnType": "AppSettings",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "saveSettings",
+          "params": [
+            "s"
+          ],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "loadAccounts",
+          "params": [],
+          "returnType": "List<AccountConfig>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "saveAccounts",
+          "params": [
+            "accounts"
+          ],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "readPassword",
+          "params": [
+            "accountId"
+          ],
+          "returnType": "Future<String?>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "writePassword",
+          "params": [
+            "accountId",
+            "password"
+          ],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "deletePassword",
+          "params": [
+            "accountId"
+          ],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "readToken",
+          "params": [
+            "accountId"
+          ],
+          "returnType": "Future<OauthToken?>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "writeToken",
+          "params": [
+            "accountId",
+            "token"
+          ],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "AppSettings",
+          "methods": [
+            "copyWith",
+            "toJson",
+            "AppSettings.fromJson"
+          ],
+          "properties": [
+            "ollamaUrl",
+            "fastModel",
+            "writingModel",
+            "userName",
+            "styleNotes",
+            "autoSort",
+            "loadRemoteImages",
+            "googleClientId",
+            "googleClientSecret",
+            "microsoftClientId",
+            "embeddingModel",
+            "semanticSearch",
+            "translationModel",
+            "myLanguage",
+            "undoSendSeconds",
+            "indexDepth"
+          ],
+          "exported": true,
+          "lineCount": 128
+        },
+        {
+          "name": "SettingsStore",
+          "methods": [
+            "SettingsStore._",
+            "open",
+            "loadSettings",
+            "saveSettings",
+            "loadAccounts",
+            "saveAccounts",
+            "readPassword",
+            "writePassword",
+            "deletePassword",
+            "readToken",
+            "writeToken"
+          ],
+          "properties": [
+            "_prefs"
+          ],
+          "exported": true,
+          "lineCount": 68
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        },
+        {
+          "source": "package:enough_mail/enough_mail.dart",
+          "specifiers": [
+            "OauthToken"
+          ]
+        },
+        {
+          "source": "package:flutter_secure_storage/flutter_secure_storage.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:shared_preferences/shared_preferences.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/account_config.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "copyWith",
+        "toJson",
+        "AppSettings.fromJson",
+        "AppSettings",
+        "SettingsStore._",
+        "open",
+        "loadSettings",
+        "saveSettings",
+        "loadAccounts",
+        "saveAccounts",
+        "readPassword",
+        "writePassword",
+        "deletePassword",
+        "readToken",
+        "writeToken",
+        "SettingsStore"
+      ],
+      "totalLines": 208,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/triage_cache.dart": {
+      "filePath": "lib/services/triage_cache.dart",
+      "contentHash": "7344a473c7c6b08d323f61cf85030405e31d86ff032fd9218ca4ba5e78089090",
+      "functions": [
+        {
+          "name": "TriageCache._",
+          "params": [
+            "_file",
+            "_data"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "TriageCache.memory",
+          "params": [
+            "data"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "open",
+          "params": [
+            "accountId"
+          ],
+          "returnType": "Future<TriageCache>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "contains",
+          "params": [
+            "key"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "putAll",
+          "params": [
+            "entries"
+          ],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "clear",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "TriageCache",
+          "methods": [
+            "TriageCache._",
+            "TriageCache.memory",
+            "open",
+            "contains",
+            "putAll",
+            "clear"
+          ],
+          "properties": [
+            "_file",
+            "_data"
+          ],
+          "exported": true,
+          "lineCount": 46
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        },
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "package:path_provider/path_provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/triage.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "TriageCache._",
+        "TriageCache.memory",
+        "open",
+        "contains",
+        "putAll",
+        "clear",
+        "TriageCache"
+      ],
+      "totalLines": 55,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/user_data.dart": {
+      "filePath": "lib/services/user_data.dart",
+      "contentHash": "41bebf8fd8c0025a111e489d4a8d44466ca0390e0da47b77bb198d1923bb1447",
+      "functions": [
+        {
+          "name": "isDue",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "toJson",
+          "params": [],
+          "returnType": "Map<String, dynamic>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "Snooze.fromJson",
+          "params": [
+            "j"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "toJson",
+          "params": [],
+          "returnType": "Map<String, dynamic>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "FollowUp.fromJson",
+          "params": [
+            "j"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "toJson",
+          "params": [],
+          "returnType": "Map<String, dynamic>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "ScheduledMail.fromJson",
+          "params": [
+            "j"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "toJson",
+          "params": [],
+          "returnType": "Map<String, dynamic>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "Template.fromJson",
+          "params": [
+            "j"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "UserData._",
+          "params": [
+            "_prefs"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "UserData.memory",
+          "params": [],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "open",
+          "params": [],
+          "returnType": "Future<UserData>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_load",
+          "params": [
+            "j"
+          ],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "toJson",
+          "params": [],
+          "returnType": "Map<String, dynamic>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "save",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "isVip",
+          "params": [
+            "email"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "isBlocked",
+          "params": [
+            "email"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "noteContact",
+          "params": [
+            "email",
+            "name",
+            "weight"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "suggestContacts",
+          "params": [
+            "prefix",
+            "limit"
+          ],
+          "returnType": "List<(String email, String name)>",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "Snooze",
+          "methods": [
+            "isDue",
+            "toJson",
+            "Snooze.fromJson"
+          ],
+          "properties": [
+            "key",
+            "accountId",
+            "until",
+            "subject",
+            "path",
+            "uid"
+          ],
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "FollowUp",
+          "methods": [
+            "toJson",
+            "FollowUp.fromJson"
+          ],
+          "properties": [
+            "messageId",
+            "accountId",
+            "subject",
+            "to",
+            "due"
+          ],
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "ScheduledMail",
+          "methods": [
+            "toJson",
+            "ScheduledMail.fromJson"
+          ],
+          "properties": [
+            "id",
+            "accountId",
+            "sendAt",
+            "to",
+            "cc",
+            "bcc",
+            "subject",
+            "body",
+            "inReplyToId",
+            "references",
+            "attachmentPaths"
+          ],
+          "exported": true,
+          "lineCount": 51
+        },
+        {
+          "name": "Template",
+          "methods": [
+            "toJson",
+            "Template.fromJson"
+          ],
+          "properties": [
+            "name",
+            "body"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "UserData",
+          "methods": [
+            "UserData._",
+            "UserData.memory",
+            "open",
+            "_load",
+            "toJson",
+            "save",
+            "isVip",
+            "isBlocked",
+            "noteContact",
+            "suggestContacts"
+          ],
+          "properties": [
+            "_prefs",
+            "vips",
+            "blocked",
+            "mutedThreads",
+            "snoozes",
+            "followUps",
+            "scheduled",
+            "templates",
+            "signatures",
+            "contacts"
+          ],
+          "exported": true,
+          "lineCount": 106
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        },
+        {
+          "source": "package:shared_preferences/shared_preferences.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "isDue",
+        "toJson",
+        "Snooze.fromJson",
+        "Snooze",
+        "toJson",
+        "FollowUp.fromJson",
+        "FollowUp",
+        "toJson",
+        "ScheduledMail.fromJson",
+        "ScheduledMail",
+        "toJson",
+        "Template.fromJson",
+        "Template",
+        "UserData._",
+        "UserData.memory",
+        "open",
+        "toJson",
+        "save",
+        "isVip",
+        "isBlocked",
+        "noteContact",
+        "suggestContacts",
+        "UserData"
+      ],
+      "totalLines": 229,
+      "hasStructuralAnalysis": true
+    },
+    "lib/services/vector_index.dart": {
+      "filePath": "lib/services/vector_index.dart",
+      "contentHash": "bb555cfb07ac9a517559e97b1120e9ff15b96da7560052401778d30070ac104b",
+      "functions": [
+        {
+          "name": "VectorIndex._",
+          "params": [
+            "_file",
+            "model"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "VectorIndex.memory",
+          "params": [
+            "model"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "length",
+          "params": [],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "contains",
+          "params": [
+            "key"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "oldestIn",
+          "params": [
+            "path"
+          ],
+          "returnType": "DateTime",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "countIn",
+          "params": [
+            "path"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_prepare",
+          "params": [
+            "v"
+          ],
+          "returnType": "Float32List",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "add",
+          "params": [
+            "mail",
+            "vector"
+          ],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "remove",
+          "params": [
+            "key"
+          ],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "search",
+          "params": [
+            "query",
+            "limit",
+            "minScore"
+          ],
+          "returnType": "List<(IndexedMail, double)>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "scheduleSave",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "save",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "open",
+          "params": [
+            "accountId",
+            "model"
+          ],
+          "returnType": "Future<VectorIndex>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "delete",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_family",
+          "params": [],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "query",
+          "params": [
+            "q"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "document",
+          "params": [
+            "e"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "IndexedMail",
+          "methods": [],
+          "properties": [
+            "key",
+            "path",
+            "uid",
+            "date"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "VectorIndex",
+          "methods": [
+            "VectorIndex._",
+            "VectorIndex.memory",
+            "length",
+            "contains",
+            "oldestIn",
+            "countIn",
+            "_prepare",
+            "add",
+            "remove",
+            "search",
+            "scheduleSave",
+            "save",
+            "open",
+            "delete"
+          ],
+          "properties": [
+            "_file",
+            "model",
+            "_entries",
+            "_vectors",
+            "_pos",
+            "_dirty",
+            "_saveTimer"
+          ],
+          "exported": true,
+          "lineCount": 207
+        },
+        {
+          "name": "EmbeddingFormat",
+          "methods": [
+            "_family",
+            "query",
+            "document"
+          ],
+          "properties": [
+            "model"
+          ],
+          "exported": true,
+          "lineCount": 32
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:async",
+          "specifiers": []
+        },
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        },
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "dart:math",
+          "specifiers": []
+        },
+        {
+          "source": "dart:typed_data",
+          "specifiers": []
+        },
+        {
+          "source": "package:path_provider/path_provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/email_content.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "IndexedMail",
+        "VectorIndex._",
+        "VectorIndex.memory",
+        "length",
+        "contains",
+        "oldestIn",
+        "countIn",
+        "add",
+        "remove",
+        "search",
+        "scheduleSave",
+        "save",
+        "open",
+        "delete",
+        "VectorIndex",
+        "query",
+        "document",
+        "EmbeddingFormat"
+      ],
+      "totalLines": 269,
+      "hasStructuralAnalysis": true
+    },
+    "lib/state/app_state.dart": {
+      "filePath": "lib/state/app_state.dart",
+      "contentHash": "49a76ddbdbd38728ca548fffd6171771cbf234fc98a467d9a4af16ba19ec4ad1",
+      "functions": [
+        {
+          "name": "isInboxBased",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "hashCode",
+          "params": [],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "OutgoingMail",
+          "params": [
+            "from",
+            "to",
+            "cc",
+            "bcc",
+            "subject",
+            "body",
+            "inReplyTo",
+            "files",
+            "sendAt",
+            "followUpDays"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "AccountSession",
+          "params": [
+            "config"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "id",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "connected",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "ViewKind",
+          "methods": [],
+          "properties": [
+            "allInboxes",
+            "folder",
+            "priority",
+            "needsReply",
+            "category",
+            "search",
+            "vip",
+            "snoozed",
+            "scheduled",
+            "followUp"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "ListFilter",
+          "methods": [],
+          "properties": [
+            "all",
+            "unread",
+            "flagged",
+            "attachments"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "MailView",
+          "methods": [
+            "isInboxBased",
+            "hashCode"
+          ],
+          "properties": [
+            "kind",
+            "category",
+            "accountId",
+            "path"
+          ],
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "ConnectionStatus",
+          "methods": [],
+          "properties": [
+            "none",
+            "connecting",
+            "connected",
+            "failed"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "Toast",
+          "methods": [],
+          "properties": [
+            "message",
+            "action",
+            "onAction",
+            "duration"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "OutgoingMail",
+          "methods": [
+            "OutgoingMail"
+          ],
+          "properties": [
+            "from",
+            "to",
+            "cc",
+            "bcc",
+            "subject",
+            "body",
+            "inReplyTo",
+            "files",
+            "sendAt",
+            "followUpDays"
+          ],
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "AccountSession",
+          "methods": [
+            "AccountSession",
+            "id",
+            "connected"
+          ],
+          "properties": [
+            "config",
+            "service",
+            "status",
+            "error",
+            "mailboxes",
+            "inbox",
+            "inboxMessages",
+            "inboxPage",
+            "inboxHasMore",
+            "loading",
+            "triage",
+            "vectors",
+            "indexService",
+            "indexing"
+          ],
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:async",
+          "specifiers": []
+        },
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "package:enough_mail/enough_mail.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter/foundation.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:http/http.dart",
+          "specifiers": [
+            "http"
+          ]
+        },
+        {
+          "source": "package:path_provider/path_provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:url_launcher/url_launcher.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/account_config.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/email_content.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/search_plan.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/triage.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/ai/ai_provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/ai/email_ai.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/ai/ollama_provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/mail_service.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/oauth.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/settings_store.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/triage_cache.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/user_data.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/vector_index.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "ViewKind",
+        "ListFilter",
+        "isInboxBased",
+        "hashCode",
+        "MailView",
+        "ConnectionStatus",
+        "Toast",
+        "OutgoingMail",
+        "OutgoingMail",
+        "AccountSession",
+        "id",
+        "connected",
+        "AccountSession"
+      ],
+      "totalLines": 1721,
+      "hasStructuralAnalysis": true
+    },
+    "lib/ui/account_setup_page.dart": {
+      "filePath": "lib/ui/account_setup_page.dart",
+      "contentHash": "0b7cb4ba603e09ab2739ae720a7405d2efeab4e7c99d1b5a570bd308cd5446af",
+      "functions": [
+        {
+          "name": "createState",
+          "params": [],
+          "returnType": "State<AccountSetupPage>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "dispose",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_onEmailChanged",
+          "params": [
+            "email"
+          ],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_discover",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_save",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_hasClient",
+          "params": [
+            "state",
+            "t"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_saveClient",
+          "params": [
+            "state",
+            "t"
+          ],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_oauthSignIn",
+          "params": [
+            "t"
+          ],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_chooser",
+          "params": [
+            "theme"
+          ],
+          "returnType": "List<Widget>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_oauthPanel",
+          "params": [
+            "theme",
+            "t"
+          ],
+          "returnType": "List<Widget>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "AccountSetupPage",
+          "methods": [
+            "createState"
+          ],
+          "properties": [
+            "isFirstRun"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "_AccountSetupPageState",
+          "methods": [
+            "dispose",
+            "_onEmailChanged",
+            "_discover",
+            "_save",
+            "_hasClient",
+            "_saveClient",
+            "_oauthSignIn",
+            "_chooser",
+            "_oauthPanel",
+            "build"
+          ],
+          "properties": [
+            "_email",
+            "_name",
+            "_password",
+            "_imapHost",
+            "_imapPort",
+            "_smtpHost",
+            "_smtpPort",
+            "_username",
+            "_preset",
+            "_advanced",
+            "_busy",
+            "_discovering",
+            "_error",
+            "_lastDiscovered",
+            "_method",
+            "_waitingForBrowser",
+            "_clientId",
+            "_clientSecret"
+          ],
+          "exported": false,
+          "lineCount": 701
+        }
+      ],
+      "imports": [
+        {
+          "source": "package:enough_mail/discover.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:provider/provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:url_launcher/url_launcher.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/account_config.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/mail_service.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/settings_store.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../state/app_state.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "createState",
+        "AccountSetupPage",
+        "dispose",
+        "build"
+      ],
+      "totalLines": 720,
+      "hasStructuralAnalysis": true
+    },
+    "lib/ui/compose_page.dart": {
+      "filePath": "lib/ui/compose_page.dart",
+      "contentHash": "5e22204c499582136fe72b8864d507a6a7880486f61ff237fdcac0cdc36536da",
+      "functions": [
+        {
+          "name": "createState",
+          "params": [],
+          "returnType": "State<ComposePage>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_generating",
+          "params": [],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_original",
+          "params": [],
+          "returnType": "MimeMessage",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "initState",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_snapshot",
+          "params": [],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_dirty",
+          "params": [],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_detectReplyLanguage",
+          "params": [
+            "state",
+            "r"
+          ],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_loadForwardedAttachments",
+          "params": [
+            "state",
+            "f"
+          ],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "dispose",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_runAi",
+          "params": [
+            "label",
+            "stream"
+          ],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_finishAi",
+          "params": [],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_stopAi",
+          "params": [],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_undo",
+          "params": [],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_suggestSubject",
+          "params": [
+            "ai"
+          ],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_finalBody",
+          "params": [
+            "state"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_validate",
+          "params": [],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_mail",
+          "params": [
+            "state",
+            "sendAt"
+          ],
+          "returnType": "OutgoingMail",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_send",
+          "params": [
+            "at"
+          ],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_sendLater",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_attach",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_confirmLeave",
+          "params": [],
+          "returnType": "Future<bool>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_snack",
+          "params": [
+            "msg"
+          ],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_templates",
+          "params": [
+            "state"
+          ],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_fromPicker",
+          "params": [
+            "state"
+          ],
+          "returnType": "Widget",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_field",
+          "params": [
+            "label",
+            "c",
+            "trailing"
+          ],
+          "returnType": "Widget",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_recipientField",
+          "params": [
+            "label",
+            "c",
+            "state",
+            "trailing"
+          ],
+          "returnType": "Widget",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_aiToolbar",
+          "params": [
+            "ai",
+            "theme",
+            "state"
+          ],
+          "returnType": "Widget",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_aiWriter",
+          "params": [
+            "ai",
+            "theme"
+          ],
+          "returnType": "Widget",
+          "exported": false,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "ComposePage",
+          "methods": [
+            "createState"
+          ],
+          "properties": [
+            "replyTo",
+            "replyAll",
+            "forwardOf",
+            "aiReplyInstruction",
+            "initialBody",
+            "restore",
+            "followUpOf"
+          ],
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "_ComposePageState",
+          "methods": [
+            "_generating",
+            "_original",
+            "initState",
+            "_snapshot",
+            "_dirty",
+            "_detectReplyLanguage",
+            "_loadForwardedAttachments",
+            "dispose",
+            "_runAi",
+            "_finishAi",
+            "_stopAi",
+            "_undo",
+            "_suggestSubject",
+            "_finalBody",
+            "_validate",
+            "_mail",
+            "_send",
+            "_sendLater",
+            "_attach",
+            "_confirmLeave",
+            "_snack",
+            "_templates",
+            "build",
+            "_fromPicker",
+            "_field",
+            "_recipientField",
+            "_aiToolbar",
+            "_aiWriter"
+          ],
+          "properties": [
+            "_to",
+            "_cc",
+            "_bcc",
+            "_subject",
+            "_body",
+            "_prompt",
+            "_bodyFocus",
+            "_fieldFocus",
+            "_showCc",
+            "_preview",
+            "_includeQuote",
+            "_suggestingSubject",
+            "_showAiWriter",
+            "_loadingAttachments",
+            "_sent",
+            "_followUpDays",
+            "_files",
+            "_aiSub",
+            "_aiLabel",
+            "_undoText",
+            "_replyLanguage",
+            "_from",
+            "_initialSnapshot"
+          ],
+          "exported": false,
+          "lineCount": 801
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:async",
+          "specifiers": []
+        },
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "package:enough_mail/enough_mail.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:file_selector/file_selector.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter/services.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:intl/intl.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:markdown/markdown.dart",
+          "specifiers": [
+            "md"
+          ]
+        },
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:provider/provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/ai/email_ai.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/mail_service.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/user_data.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../state/app_state.dart",
+          "specifiers": []
+        },
+        {
+          "source": "message_view.dart",
+          "specifiers": [
+            "pickDateTime"
+          ]
+        },
+        {
+          "source": "sidebar.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "createState",
+        "ComposePage",
+        "initState",
+        "dispose",
+        "build"
+      ],
+      "totalLines": 851,
+      "hasStructuralAnalysis": true
+    },
+    "lib/ui/email_web_view.dart": {
+      "filePath": "lib/ui/email_web_view.dart",
+      "contentHash": "4e1f63dea936e7622ef03cff6d7325eb26f4cff0ce2752ec40c93aac611cd285",
+      "functions": [
+        {
+          "name": "supported",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "createState",
+          "params": [],
+          "returnType": "State<EmailWebView>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "initState",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_load",
+          "params": [],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "didUpdateWidget",
+          "params": [
+            "old"
+          ],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "EmailWebView",
+          "methods": [
+            "supported",
+            "createState"
+          ],
+          "properties": [
+            "html",
+            "background"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "_EmailWebViewState",
+          "methods": [
+            "initState",
+            "_load",
+            "didUpdateWidget",
+            "build"
+          ],
+          "properties": [
+            "_controller",
+            "_loaded"
+          ],
+          "exported": false,
+          "lineCount": 62
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter/foundation.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:url_launcher/url_launcher.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:webview_flutter/webview_flutter.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "supported",
+        "createState",
+        "EmailWebView",
+        "initState",
+        "didUpdateWidget",
+        "build"
+      ],
+      "totalLines": 90,
+      "hasStructuralAnalysis": true
+    },
+    "lib/ui/home_page.dart": {
+      "filePath": "lib/ui/home_page.dart",
+      "contentHash": "41badad0a7410224f8e05f85c500f9927e6607c092352661a0cbe7406cf80304",
+      "functions": [
+        {
+          "name": "createState",
+          "params": [],
+          "returnType": "State<HomePage>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "initState",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "dispose",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_compose",
+          "params": [],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_settings",
+          "params": [],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "_catchUp",
+          "params": [
+            "state"
+          ],
+          "returnType": "void",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "HomePage",
+          "methods": [
+            "createState"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_HomePageState",
+          "methods": [
+            "initState",
+            "dispose",
+            "_compose",
+            "_settings",
+            "_catchUp",
+            "build"
+          ],
+          "properties": [
+            "_searchFocus",
+            "_toastSub",
+            "_undoSub",
+            "_showingMessageOnPhone"
+          ],
+          "exported": false,
+          "lineCount": 154
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:async",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter/services.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:provider/provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/mail_service.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../state/app_state.dart",
+          "specifiers": []
+        },
+        {
+          "source": "compose_page.dart",
+          "specifiers": []
+        },
+        {
+          "source": "message_list.dart",
+          "specifiers": []
+        },
+        {
+          "source": "message_view.dart",
+          "specifiers": []
+        },
+        {
+          "source": "settings_page.dart",
+          "specifiers": []
+        },
+        {
+          "source": "sidebar.dart",
+          "specifiers": []
+        },
+        {
+          "source": "widgets/ai_widgets.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "createState",
+        "HomePage",
+        "initState",
+        "dispose",
+        "build"
+      ],
+      "totalLines": 179,
+      "hasStructuralAnalysis": true
+    },
+    "lib/ui/message_list.dart": {
+      "filePath": "lib/ui/message_list.dart",
+      "contentHash": "09b238fd44432977dadfba57550a8dcd7fa8814f7dd4ed551564a780d044f91e",
+      "functions": [
+        {
+          "name": "formatListDate",
+          "params": [
+            "d"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_buildList",
+          "params": [
+            "context",
+            "state",
+            "list"
+          ],
+          "returnType": "Widget",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "createState",
+          "params": [],
+          "returnType": "State<_SearchBar>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "dispose",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "createState",
+          "params": [],
+          "returnType": "State<_SearchHeader>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "MessageListPane",
+          "methods": [
+            "build",
+            "_buildList"
+          ],
+          "properties": [
+            "searchFocus",
+            "onOpen"
+          ],
+          "exported": true,
+          "lineCount": 188
+        },
+        {
+          "name": "_SearchBar",
+          "methods": [
+            "createState"
+          ],
+          "properties": [
+            "focus"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "_SearchBarState",
+          "methods": [
+            "dispose",
+            "build"
+          ],
+          "properties": [
+            "_controller",
+            "_useAi"
+          ],
+          "exported": false,
+          "lineCount": 57
+        },
+        {
+          "name": "_SearchHeader",
+          "methods": [
+            "createState"
+          ],
+          "properties": [
+            "state"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "_SearchHeaderState",
+          "methods": [
+            "build"
+          ],
+          "properties": [
+            "_answeredFor",
+            "_showAnswer"
+          ],
+          "exported": false,
+          "lineCount": 53
+        },
+        {
+          "name": "MessageTile",
+          "methods": [
+            "build"
+          ],
+          "properties": [
+            "message",
+            "account",
+            "vip",
+            "reminder",
+            "suspicious",
+            "triage",
+            "selected",
+            "onTap"
+          ],
+          "exported": true,
+          "lineCount": 117
+        },
+        {
+          "name": "_Tag",
+          "methods": [
+            "build"
+          ],
+          "properties": [
+            "label",
+            "color"
+          ],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "_ScheduledList",
+          "methods": [
+            "build"
+          ],
+          "properties": [
+            "state"
+          ],
+          "exported": false,
+          "lineCount": 37
+        },
+        {
+          "name": "_FollowUpList",
+          "methods": [
+            "build"
+          ],
+          "properties": [
+            "state"
+          ],
+          "exported": false,
+          "lineCount": 46
+        }
+      ],
+      "imports": [
+        {
+          "source": "package:enough_mail/enough_mail.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:intl/intl.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:provider/provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/triage.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/mail_service.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/user_data.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../state/app_state.dart",
+          "specifiers": []
+        },
+        {
+          "source": "compose_page.dart",
+          "specifiers": []
+        },
+        {
+          "source": "message_view.dart",
+          "specifiers": [
+            "showMessageMenu"
+          ]
+        },
+        {
+          "source": "sidebar.dart",
+          "specifiers": []
+        },
+        {
+          "source": "widgets/ai_widgets.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "formatListDate",
+        "build",
+        "MessageListPane",
+        "createState",
+        "dispose",
+        "build",
+        "createState",
+        "build",
+        "build",
+        "MessageTile",
+        "build",
+        "build",
+        "build"
+      ],
+      "totalLines": 564,
+      "hasStructuralAnalysis": true
+    },
+    "lib/ui/message_view.dart": {
+      "filePath": "lib/ui/message_view.dart",
+      "contentHash": "01f67c967841415047539d015f8b9afc527faf31b411e58180630ec05a76a46f",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "dart:async",
+          "specifiers": []
+        },
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        },
+        {
+          "source": "package:enough_mail/enough_mail.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter/services.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:intl/intl.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:provider/provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/ai/email_ai.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/email_html.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/mail_service.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../state/app_state.dart",
+          "specifiers": []
+        },
+        {
+          "source": "compose_page.dart",
+          "specifiers": []
+        },
+        {
+          "source": "email_web_view.dart",
+          "specifiers": []
+        },
+        {
+          "source": "sidebar.dart",
+          "specifiers": []
+        },
+        {
+          "source": "widgets/ai_widgets.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [],
+      "totalLines": 825,
+      "hasStructuralAnalysis": true
+    },
+    "lib/ui/settings_page.dart": {
+      "filePath": "lib/ui/settings_page.dart",
+      "contentHash": "fb20c6ad05a8a54b5bd4d1e3cc1bf78ef432bab12e53738545b1f4fc145cf95d",
+      "functions": [
+        {
+          "name": "createState",
+          "params": [],
+          "returnType": "State<SettingsPage>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "dispose",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "_save",
+          "params": [
+            "s"
+          ],
+          "returnType": "Future<void>",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "SettingsPage",
+          "methods": [
+            "createState"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_SettingsPageState",
+          "methods": [
+            "dispose",
+            "_save",
+            "build"
+          ],
+          "properties": [
+            "_state",
+            "_url",
+            "_name",
+            "_style",
+            "_gId",
+            "_gSecret",
+            "_msId",
+            "_signatures",
+            "_checking"
+          ],
+          "exported": false,
+          "lineCount": 348
+        }
+      ],
+      "imports": [
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:provider/provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/account_config.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/ai/email_ai.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../services/settings_store.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../state/app_state.dart",
+          "specifiers": []
+        },
+        {
+          "source": "account_setup_page.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "createState",
+        "SettingsPage",
+        "dispose",
+        "build"
+      ],
+      "totalLines": 365,
+      "hasStructuralAnalysis": true
+    },
+    "lib/ui/sidebar.dart": {
+      "filePath": "lib/ui/sidebar.dart",
+      "contentHash": "1177f59cc665eff7cabe7d5a1bbd7ff965affd7f04da763e5f77ee51dbeb38ac",
+      "functions": [
+        {
+          "name": "categoryColor",
+          "params": [
+            "c"
+          ],
+          "returnType": "Color",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "accountColor",
+          "params": [
+            "index"
+          ],
+          "returnType": "Color",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "mailboxIcon",
+          "params": [
+            "b"
+          ],
+          "returnType": "IconData",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "createState",
+          "params": [],
+          "returnType": "State<Sidebar>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "Sidebar",
+          "methods": [
+            "createState"
+          ],
+          "properties": [
+            "onNavigate"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "_SidebarState",
+          "methods": [
+            "build"
+          ],
+          "properties": [
+            "_expanded"
+          ],
+          "exported": false,
+          "lineCount": 210
+        },
+        {
+          "name": "AccountBadge",
+          "methods": [
+            "build"
+          ],
+          "properties": [
+            "config",
+            "index"
+          ],
+          "exported": true,
+          "lineCount": 21
+        }
+      ],
+      "imports": [
+        {
+          "source": "package:enough_mail/enough_mail.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:provider/provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/account_config.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../models/triage.dart",
+          "specifiers": []
+        },
+        {
+          "source": "../state/app_state.dart",
+          "specifiers": []
+        },
+        {
+          "source": "account_setup_page.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "categoryColor",
+        "accountColor",
+        "mailboxIcon",
+        "createState",
+        "Sidebar",
+        "build",
+        "build",
+        "AccountBadge"
+      ],
+      "totalLines": 290,
+      "hasStructuralAnalysis": true
+    },
+    "lib/ui/widgets/ai_widgets.dart": {
+      "filePath": "lib/ui/widgets/ai_widgets.dart",
+      "contentHash": "f9573104996df117662ef8a68d751c0f67231e658742bf493c7b797b83bddc2d",
+      "functions": [
+        {
+          "name": "inline",
+          "params": [
+            "line",
+            "base"
+          ],
+          "returnType": "List<InlineSpan>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "createState",
+          "params": [],
+          "returnType": "State<AiStreamView>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "initState",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "dispose",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "build",
+          "params": [
+            "context"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "MarkdownText",
+          "methods": [
+            "inline",
+            "build"
+          ],
+          "properties": [
+            "text",
+            "style"
+          ],
+          "exported": true,
+          "lineCount": 60
+        },
+        {
+          "name": "AiStreamView",
+          "methods": [
+            "createState"
+          ],
+          "properties": [
+            "start",
+            "onDone",
+            "placeholder"
+          ],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "_AiStreamViewState",
+          "methods": [
+            "initState",
+            "dispose",
+            "build"
+          ],
+          "properties": [
+            "_buf",
+            "_sub",
+            "_done",
+            "_error"
+          ],
+          "exported": false,
+          "lineCount": 56
+        },
+        {
+          "name": "AiCard",
+          "methods": [
+            "build"
+          ],
+          "properties": [
+            "title",
+            "child",
+            "onClose",
+            "trailing"
+          ],
+          "exported": true,
+          "lineCount": 44
+        }
+      ],
+      "imports": [
+        {
+          "source": "dart:async",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter/services.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "inline",
+        "build",
+        "MarkdownText",
+        "createState",
+        "AiStreamView",
+        "initState",
+        "dispose",
+        "build",
+        "build",
+        "AiCard"
+      ],
+      "totalLines": 189,
+      "hasStructuralAnalysis": true
+    },
+    "macos/Runner/Configs/AppInfo.xcconfig": {
+      "filePath": "macos/Runner/Configs/AppInfo.xcconfig",
+      "contentHash": "da0749115d01a2b29839fd1a6750ea688ef9b9bbd42aac7f3a7161fea925ca8c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": false
+    },
+    "macos/Runner/Configs/Signing.xcconfig.example": {
+      "filePath": "macos/Runner/Configs/Signing.xcconfig.example",
+      "contentHash": "3a0a900f7d416a9120d2ca6cc682feb8e3706193384a99325fe2479c8f9b93f4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 7,
+      "hasStructuralAnalysis": false
+    },
+    "macos/Runner/DebugProfile.entitlements": {
+      "filePath": "macos/Runner/DebugProfile.entitlements",
+      "contentHash": "cce36a218efc7784c93e48f0acb1db7b761654f18b5afe95d86ebf998b58916d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": false
+    },
+    "macos/Runner/Info.plist": {
+      "filePath": "macos/Runner/Info.plist",
+      "contentHash": "f253e89c512b3a9a81bc5cdd7a14bf932470f835f261654a808ea4549cd94aad",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 33,
+      "hasStructuralAnalysis": false
+    },
+    "macos/Runner/Release.entitlements": {
+      "filePath": "macos/Runner/Release.entitlements",
+      "contentHash": "f1f67cade7470481b3f6516a08c993d64b65fbfc35c7a011b31e97fc362b93b1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": false
+    },
+    "pubspec.yaml": {
+      "filePath": "pubspec.yaml",
+      "contentHash": "6b50ae014f501079632fb920657d13133b27a9f953ab7894730a6aa82651a125",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 105,
+      "hasStructuralAnalysis": false
+    },
+    "test/features_test.dart": {
+      "filePath": "test/features_test.dart",
+      "contentHash": "3c45d43fa9cede61c443a8bc7357bca6fa4ecce48e72e8a9bf98434ac69a6909",
+      "functions": [
+        {
+          "name": "msg",
+          "params": [
+            "headers",
+            "body"
+          ],
+          "returnType": "MimeMessage",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "package:enough_mail/enough_mail.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter_test/flutter_test.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/models/email_content.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/ai/email_ai.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/email_html.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/mail_service.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/user_data.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/vector_index.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "msg",
+        "main"
+      ],
+      "totalLines": 153,
+      "hasStructuralAnalysis": true
+    },
+    "test/oauth_test.dart": {
+      "filePath": "test/oauth_test.dart",
+      "contentHash": "23de3b68abebc9696021ee3deb766825dfb161be5a001b343a1421a82493ec47",
+      "functions": [
+        {
+          "name": "_jwt",
+          "params": [
+            "claims"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "fakeBrowser",
+          "params": [
+            "inspect",
+            "tamperState",
+            "error"
+          ],
+          "returnType": "Future<bool> Function(Uri)",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        },
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "package:crypto/crypto.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter_test/flutter_test.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:http/http.dart",
+          "specifiers": [
+            "http"
+          ]
+        },
+        {
+          "source": "package:http/testing.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/models/account_config.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/oauth.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "fakeBrowser",
+        "main"
+      ],
+      "totalLines": 159,
+      "hasStructuralAnalysis": true
+    },
+    "test/widget_test.dart": {
+      "filePath": "test/widget_test.dart",
+      "contentHash": "dd49d5cf4d737e7485444643091a8449f67c37eb7a4f9febef5f7c01097ca09c",
+      "functions": [
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "package:flutter_test/flutter_test.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/models/search_plan.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/ai/email_ai.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/html_text.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/mail_service.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "main"
+      ],
+      "totalLines": 79,
+      "hasStructuralAnalysis": true
+    },
+    "tool/ai_smoke.dart": {
+      "filePath": "tool/ai_smoke.dart",
+      "contentHash": "b980c25533147040dd73c1ba80e3d3ca22c45c4d5b1eb465726845cb9b2d4adb",
+      "functions": [
+        {
+          "name": "main",
+          "params": [
+            "args"
+          ],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/models/email_content.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/ai/email_ai.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/ai/ollama_provider.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "main"
+      ],
+      "totalLines": 107,
+      "hasStructuralAnalysis": true
+    },
+    "tool/model_bench.dart": {
+      "filePath": "tool/model_bench.dart",
+      "contentHash": "5d4b7c56c1ed67b7357a9a2dd7b604215045af63c2f9c67769820eb20e34fd66",
+      "functions": [
+        {
+          "name": "post",
+          "params": [
+            "path",
+            "body"
+          ],
+          "returnType": "Future<Map<String, dynamic>>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "norm",
+          "params": [
+            "v",
+            "dims"
+          ],
+          "returnType": "List<double>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "dot",
+          "params": [
+            "a",
+            "b"
+          ],
+          "returnType": "double",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "embed",
+          "params": [
+            "model",
+            "input"
+          ],
+          "returnType": "Future<List<List<double>>>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "benchEmbed",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "main",
+          "params": [
+            "args"
+          ],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "dart:convert",
+          "specifiers": []
+        },
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "dart:math",
+          "specifiers": []
+        },
+        {
+          "source": "package:http/http.dart",
+          "specifiers": [
+            "http"
+          ]
+        }
+      ],
+      "exports": [
+        "post",
+        "norm",
+        "dot",
+        "embed",
+        "benchEmbed",
+        "main"
+      ],
+      "totalLines": 334,
+      "hasStructuralAnalysis": true
+    },
+    "tool/screenshots_test.dart": {
+      "filePath": "tool/screenshots_test.dart",
+      "contentHash": "96893f22137edd2e7e52340127eccf3d08259c1fe5791c6046603da70ea06d9d",
+      "functions": [
+        {
+          "name": "name",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "listModels",
+          "params": [],
+          "returnType": "Future<List<String>>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "chat",
+          "params": [
+            "messages",
+            "model",
+            "temperature",
+            "jsonSchema"
+          ],
+          "returnType": "Stream<String>",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "mail",
+          "params": [
+            "name",
+            "email",
+            "subject",
+            "body",
+            "ago",
+            "seen",
+            "flagged"
+          ],
+          "returnType": "MimeMessage",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "loadFonts",
+          "params": [],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "snap",
+          "params": [
+            "tester",
+            "name"
+          ],
+          "returnType": "Future<void>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "sampleState",
+          "params": [],
+          "returnType": "Future<AppState>",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "app",
+          "params": [
+            "state",
+            "home",
+            "brightness"
+          ],
+          "returnType": "Widget",
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 1
+        }
+      ],
+      "classes": [
+        {
+          "name": "CannedAi",
+          "methods": [
+            "name",
+            "listModels",
+            "chat"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 20
+        }
+      ],
+      "imports": [
+        {
+          "source": "package:flutter/gestures.dart",
+          "specifiers": []
+        },
+        {
+          "source": "dart:io",
+          "specifiers": []
+        },
+        {
+          "source": "dart:ui",
+          "specifiers": [
+            "ui"
+          ]
+        },
+        {
+          "source": "package:enough_mail/enough_mail.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter/rendering.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter/services.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:flutter_test/flutter_test.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/main.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/models/account_config.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/models/triage.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/ai/ai_provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/ai/email_ai.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/mail_service.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/services/settings_store.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/state/app_state.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/ui/account_setup_page.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:hearthmail/ui/compose_page.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:material_ui/material_ui.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:provider/provider.dart",
+          "specifiers": []
+        },
+        {
+          "source": "package:shared_preferences/shared_preferences.dart",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "name",
+        "listModels",
+        "chat",
+        "CannedAi",
+        "mail",
+        "loadFonts",
+        "snap",
+        "sampleState",
+        "app",
+        "main"
+      ],
+      "totalLines": 288,
+      "hasStructuralAnalysis": true
+    }
+  }
+}
