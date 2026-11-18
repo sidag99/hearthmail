@@ -193,8 +193,9 @@ class AppState extends ChangeNotifier {
   ListFilter listFilter = ListFilter.all;
   InboxCategory inboxCategory = InboxCategory.primary;
 
-  /// The category bar shows once the AI sorts mail.
-  bool get categoriesEnabled => aiReady && settings.autoSort;
+  /// Categories are opt-in (View options ⋯ > Show Mail Categories) and
+  /// need the AI to sort mail.
+  bool get categoriesEnabled => aiReady && settings.autoSort && settings.showCategories;
 
   bool get _categoryApplies =>
       categoriesEnabled &&
@@ -778,7 +779,13 @@ class AppState extends ChangeNotifier {
   List<MimeMessage> get visibleMessages {
     var all = _viewMessages(view);
     if (_categoryApplies) all = all.where((m) => categoryOf(m) == inboxCategory).toList();
-    return listFilter == ListFilter.all || view.kind == ViewKind.search ? all : all.where(_passesFilter).toList();
+    if (listFilter != ListFilter.all && view.kind != ViewKind.search) all = all.where(_passesFilter).toList();
+    if (settings.priorityFirst && view.kind != ViewKind.search) {
+      // Mail's "Show Priority Messages": important unread mail on top.
+      bool top(MimeMessage m) => !m.isSeen && (isVipMessage(m) || triageOf(m)?.priority == MailPriority.high);
+      all = [...all.where(top), ...all.where((m) => !top(m))];
+    }
+    return all;
   }
 
   List<MimeMessage> _viewMessages(MailView view) {

@@ -113,7 +113,14 @@ class MessageToolbar extends StatelessWidget {
     final state = context.read<AppState>();
     final m = message;
     final c = MacColors.of(context);
-    final narrow = MediaQuery.sizeOf(context).width < 700;
+    return LayoutBuilder(builder: (context, box) => _build(context, state, m, c, box.maxWidth));
+  }
+
+  Widget _build(BuildContext context, AppState state, MimeMessage? m, MacColors c, double width) {
+    // Fold the less-used buttons into ⋯ and shrink or drop the search
+    // field so nothing overflows at any window size.
+    final narrow = width < 660;
+    final searchWidth = search == null ? 0.0 : (width - (narrow ? 330 : 440)).clamp(0.0, 230.0);
     VoidCallback? on(void Function(MimeMessage m) f) => m == null ? null : () => f(m);
 
     Future<void> snoozeMenu(BuildContext bc) async {
@@ -172,7 +179,7 @@ class MessageToolbar extends StatelessWidget {
         child: SizedBox(
           width: 32,
           height: 28,
-          child: Icon(CupertinoIcons.sparkles, size: 17, color: m != null && state.aiReady ? c.accent : c.tertiaryLabel),
+          child: Icon(CupertinoIcons.sparkles, size: 17, color: m != null && state.aiReady ? c.secondaryLabel : c.tertiaryLabel),
         ),
       ),
     );
@@ -250,7 +257,7 @@ class MessageToolbar extends StatelessWidget {
         Builder(
           builder: (bc) => ToolButton(
             icon: CupertinoIcons.alarm,
-            color: m != null && state.snoozeOf(m) != null ? const Color(0xFFAF52DE) : null,
+            color: m != null && state.snoozeOf(m) != null ? MacColors.of(context).accent : null,
             tooltip: 'Remind Me',
             onPressed: m == null ? null : () => snoozeMenu(bc),
           ),
@@ -258,7 +265,7 @@ class MessageToolbar extends StatelessWidget {
         aiMenu,
         more,
         const Spacer(),
-        if (search != null) SizedBox(width: 230, child: search),
+        if (searchWidth >= 120) SizedBox(width: searchWidth, child: search),
       ]),
     );
   }
@@ -532,7 +539,7 @@ class _MessageBodyState extends State<_MessageBody> {
                     child: Tooltip(
                       message: vip ? 'VIP · click to remove' : 'Add to VIPs',
                       child: Icon(vip ? CupertinoIcons.star_fill : CupertinoIcons.star,
-                          size: 13, color: vip ? const Color(0xFFFF9500) : c.tertiaryLabel),
+                          size: 13, color: vip ? c.secondaryLabel : c.tertiaryLabel),
                     ),
                   ),
                 ),

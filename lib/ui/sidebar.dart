@@ -353,7 +353,7 @@ class _SidebarRow extends StatelessWidget {
   }
 }
 
-/// Small colored label naming the account a message belongs to.
+/// Small gray label naming the account a message belongs to.
 class AccountBadge extends StatelessWidget {
   const AccountBadge({super.key, required this.config, required this.index});
 
@@ -362,10 +362,7 @@ class AccountBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accountColor(index);
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-      const SizedBox(width: 4),
       Flexible(
         child: Text(config.email,
             overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: MacColors.of(context).secondaryLabel)),

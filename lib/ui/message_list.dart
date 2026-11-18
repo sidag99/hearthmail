@@ -11,7 +11,6 @@ import '../state/app_state.dart';
 import 'compose_page.dart';
 import 'mac_style.dart';
 import 'message_view.dart' show showMessageMenu;
-import 'sidebar.dart';
 import 'widgets/ai_widgets.dart';
 
 /// Dates the way Mail shows them: time today, "Yesterday", weekday this
@@ -52,10 +51,15 @@ class MessageListPane extends StatelessWidget {
     this.onCompose,
     this.onCatchUp,
     this.leading,
+    this.titleInset = 0,
   });
 
   /// Shown before the title (the sidebar button on phones).
   final Widget? leading;
+
+  /// Room on the left for the window's traffic lights when this pane is
+  /// the leftmost one.
+  final double titleInset;
 
   final FocusNode searchFocus;
   final VoidCallback? onOpen;
@@ -87,7 +91,7 @@ class MessageListPane extends StatelessWidget {
         SizedBox(
           height: kToolbarHeight52,
           child: Padding(
-            padding: EdgeInsets.only(left: leading == null ? 16 : 6, right: 6),
+            padding: EdgeInsets.only(left: titleInset + (leading == null ? 16 : 6), right: 6),
             child: Row(children: [
               ?leading,
               Expanded(
@@ -106,8 +110,9 @@ class MessageListPane extends StatelessWidget {
                   child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)),
                 ),
               if (!special) _FilterButton(state: state),
+              _ViewOptionsButton(state: state),
               if (onCatchUp != null && state.aiReady)
-                ToolButton(icon: CupertinoIcons.sparkles, tooltip: 'Catch me up', onPressed: onCatchUp),
+                ToolButton(icon: CupertinoIcons.sparkles, tooltip: 'Catch me up', onPressed: onCatchUp, color: c.secondaryLabel),
               if (onCompose != null)
                 ToolButton(icon: CupertinoIcons.square_pencil, tooltip: 'New Message (⌘N)', onPressed: onCompose),
             ]),
@@ -171,7 +176,6 @@ class MessageListPane extends StatelessWidget {
       return Center(child: Text(empty, style: TextStyle(fontSize: 15, color: c.tertiaryLabel, fontWeight: FontWeight.w500)));
     }
     final canLoadMore = state.canLoadMore;
-    final showAccount = state.sessions.length > 1 && state.view.kind != ViewKind.folder;
     final phone = MediaQuery.sizeOf(context).width < 700;
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {
@@ -189,14 +193,13 @@ class MessageListPane extends StatelessWidget {
             );
           }
           final m = list[i];
-          final owner = state.sessionOf(m);
           final z = state.snoozeOf(m);
           final selected = identical(state.selected, m);
           final next = i + 1 < list.length ? list[i + 1] : null;
           final tile = MessageTile(
             message: m,
             triage: state.triageOf(m),
-            accountColor: showAccount && owner != null ? accountColor(state.indexOf(owner)) : null,
+            showPhoto: state.settings.showContactPhotos,
             selected: selected,
             // Like Mail, no separator touches the selection highlight.
             showSeparator: !selected && (next == null || !identical(state.selected, next)),
@@ -260,8 +263,8 @@ class _FilterButton extends StatelessWidget {
           width: 32,
           height: 28,
           child: Icon(
-            active ? CupertinoIcons.line_horizontal_3_decrease_circle_fill : CupertinoIcons.line_horizontal_3_decrease_circle,
-            size: 18,
+            active ? CupertinoIcons.line_horizontal_3_decrease_circle_fill : CupertinoIcons.line_horizontal_3_decrease,
+            size: active ? 18 : 16,
             color: active ? c.accent : c.secondaryLabel,
           ),
         ),
@@ -277,6 +280,57 @@ class _FilterButton extends StatelessWidget {
       };
 }
 
+enum _ViewOption { categories, priority, photos, about }
+
+/// Mail's ⋯ view options menu.
+class _ViewOptionsButton extends StatelessWidget {
+  const _ViewOptionsButton({required this.state});
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MacColors.of(context);
+    final s = state.settings;
+    return ToolbarItem(
+      child: PopupMenuButton<_ViewOption>(
+        tooltip: 'View Options',
+        onSelected: (o) => switch (o) {
+          _ViewOption.categories => state.updateSettings(s.copyWith(showCategories: !s.showCategories)),
+          _ViewOption.priority => state.updateSettings(s.copyWith(priorityFirst: !s.priorityFirst)),
+          _ViewOption.photos => state.updateSettings(s.copyWith(showContactPhotos: !s.showContactPhotos)),
+          _ViewOption.about => _aboutCategories(context),
+        },
+        itemBuilder: (_) => [
+          CheckedPopupMenuItem(
+              value: _ViewOption.categories, checked: s.showCategories, height: 32, child: const Text('Show Mail Categories')),
+          CheckedPopupMenuItem(
+              value: _ViewOption.priority, checked: s.priorityFirst, height: 32, child: const Text('Show Priority Messages')),
+          CheckedPopupMenuItem(
+              value: _ViewOption.photos, checked: s.showContactPhotos, height: 32, child: const Text('Show Contact Photo')),
+          const PopupMenuDivider(),
+          const PopupMenuItem(value: _ViewOption.about, height: 32, child: Text('About Categories…')),
+        ],
+        child: SizedBox(width: 32, height: 28, child: Icon(CupertinoIcons.ellipsis_circle, size: 17, color: c.secondaryLabel)),
+      ),
+    );
+  }
+
+  static void _aboutCategories(BuildContext context) => showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('About Categories'),
+          content: const SizedBox(
+            width: 360,
+            child: Text('Categories sort your inbox into Primary, Transactions, Updates and Promotions. '
+                'Sorting is done by the AI on this Mac, and your mail never leaves it.\n\n'
+                'VIPs, flagged mail and anything important always stays in Primary. '
+                'Show Priority Messages moves important unread mail to the top of the list.'),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))],
+        ),
+      );
+}
+
 /// Primary · Transactions · Updates · Promotions, like Mail's categories.
 class _CategoryBar extends StatelessWidget {
   const _CategoryBar({required this.state});
@@ -288,14 +342,6 @@ class _CategoryBar extends StatelessWidget {
         InboxCategory.updates => CupertinoIcons.chat_bubble_2_fill,
         InboxCategory.promotions => CupertinoIcons.tag_fill,
         InboxCategory.all => CupertinoIcons.tray_fill,
-      };
-
-  static Color _color(InboxCategory c) => switch (c) {
-        InboxCategory.primary => const Color(0xFF007AFF),
-        InboxCategory.transactions => const Color(0xFF34C759),
-        InboxCategory.updates => const Color(0xFFAF52DE),
-        InboxCategory.promotions => const Color(0xFFFF2D55),
-        InboxCategory.all => const Color(0xFF8E8E93),
       };
 
   @override
@@ -310,7 +356,6 @@ class _CategoryBar extends StatelessWidget {
             child: Builder(builder: (context) {
               final selected = state.inboxCategory == cat;
               final unread = cat == InboxCategory.all ? 0 : state.unreadInCategory(cat);
-              final color = _color(cat);
               return Tooltip(
                 message: unread > 0 ? '${cat.label} · $unread unread' : cat.label,
                 child: InkWell(
@@ -320,15 +365,12 @@ class _CategoryBar extends StatelessWidget {
                     duration: const Duration(milliseconds: 160),
                     height: 28,
                     padding: EdgeInsets.symmetric(horizontal: selected ? 10 : 9),
-                    decoration: BoxDecoration(color: selected ? color : c.fill, borderRadius: BorderRadius.circular(14)),
+                    decoration: BoxDecoration(color: selected ? c.fill : Colors.transparent, borderRadius: BorderRadius.circular(14)),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(_icon(cat), size: 14, color: selected ? Colors.white : c.secondaryLabel),
+                      Icon(_icon(cat), size: 14, color: selected ? c.label : c.secondaryLabel),
                       if (selected) ...[
                         const SizedBox(width: 5),
-                        Text(cat.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                      ] else if (unread > 0) ...[
-                        const SizedBox(width: 3),
-                        Container(width: 5, height: 5, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                        Text(cat.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.label)),
                       ],
                     ]),
                   ),
@@ -467,7 +509,7 @@ class MessageTile extends StatelessWidget {
     required this.triage,
     required this.selected,
     required this.onTap,
-    this.accountColor,
+    this.showPhoto = false,
     this.vip = false,
     this.reminder = false,
     this.suspicious = false,
@@ -475,7 +517,7 @@ class MessageTile extends StatelessWidget {
   });
 
   final MimeMessage message;
-  final Color? accountColor;
+  final bool showPhoto;
   final Triage? triage;
   final bool selected;
   final VoidCallback onTap;
@@ -494,8 +536,9 @@ class MessageTile extends StatelessWidget {
     final fg2 = selected ? Colors.white.withValues(alpha: 0.85) : c.secondaryLabel;
     final needsReply = t != null && t.needsReply && !message.isAnswered;
 
-    Widget badge(IconData i, Color color, [String? tip]) {
-      final icon = Icon(i, size: 12, color: selected ? Colors.white : color);
+    // Status icons stay gray, like Mail; only the flag keeps its color.
+    Widget badge(IconData i, [String? tip, Color? color]) {
+      final icon = Icon(i, size: 12, color: selected ? Colors.white : color ?? c.tertiaryLabel);
       return Padding(padding: const EdgeInsets.only(left: 4), child: tip == null ? icon : Tooltip(message: tip, child: icon));
     }
 
@@ -531,6 +574,11 @@ class MessageTile extends StatelessWidget {
                   ),
                 ),
               ),
+              if (showPhoto)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8, top: 1),
+                  child: InitialsAvatar(MailService.senderName(message), size: 30),
+                ),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
@@ -544,15 +592,6 @@ class MessageTile extends StatelessWidget {
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fg),
                       ),
                     ),
-                    if (accountColor != null)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(color: selected ? Colors.white : accountColor, shape: BoxShape.circle),
-                        ),
-                      ),
                     const SizedBox(width: 6),
                     Text(formatListDate(MailService.dateOf(message)), style: TextStyle(fontSize: 12, color: fg2)),
                   ]),
@@ -562,12 +601,12 @@ class MessageTile extends StatelessWidget {
                       child: Text(MailService.subjectOf(message),
                           maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: fg)),
                     ),
-                    if (suspicious) badge(CupertinoIcons.exclamationmark_triangle_fill, const Color(0xFFFF3B30), 'Looks suspicious'),
-                    if (reminder) badge(CupertinoIcons.alarm, const Color(0xFFAF52DE), 'Reminder'),
-                    if (t?.priority == MailPriority.high) badge(CupertinoIcons.exclamationmark_circle_fill, const Color(0xFFFF3B30), 'Priority'),
-                    if (needsReply) badge(CupertinoIcons.arrowshape_turn_up_left_fill, c.accent, 'Needs reply'),
-                    if (message.hasAttachments()) badge(CupertinoIcons.paperclip, c.secondaryLabel),
-                    if (message.isFlagged) badge(CupertinoIcons.flag_fill, const Color(0xFFFF9500)),
+                    if (suspicious) badge(CupertinoIcons.exclamationmark_triangle, 'Looks suspicious'),
+                    if (reminder) badge(CupertinoIcons.alarm, 'Reminder'),
+                    if (t?.priority == MailPriority.high) badge(CupertinoIcons.exclamationmark, 'Priority'),
+                    if (needsReply) badge(CupertinoIcons.arrowshape_turn_up_left, 'Needs reply'),
+                    if (message.hasAttachments()) badge(CupertinoIcons.paperclip),
+                    if (message.isFlagged) badge(CupertinoIcons.flag_fill, null, const Color(0xFFFF9500)),
                   ]),
                   if (body.isNotEmpty) ...[
                     const SizedBox(height: 1),

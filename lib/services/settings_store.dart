@@ -31,7 +31,15 @@ class AppSettings {
     this.assistEngine = 'local',
     this.writingCloudModel = '',
     this.assistCloudModel = '',
+    this.showCategories = false,
+    this.priorityFirst = false,
+    this.showContactPhotos = false,
   });
+
+  /// Mail's view options (the ⋯ menu above the message list).
+  final bool showCategories;
+  final bool priorityFirst;
+  final bool showContactPhotos;
 
   /// Show one row per conversation in message lists.
   final bool groupConversations;
@@ -105,6 +113,9 @@ class AppSettings {
     String? assistEngine,
     String? writingCloudModel,
     String? assistCloudModel,
+    bool? showCategories,
+    bool? priorityFirst,
+    bool? showContactPhotos,
   }) =>
       AppSettings(
         groupConversations: groupConversations ?? this.groupConversations,
@@ -129,6 +140,9 @@ class AppSettings {
         assistEngine: assistEngine ?? this.assistEngine,
         writingCloudModel: writingCloudModel ?? this.writingCloudModel,
         assistCloudModel: assistCloudModel ?? this.assistCloudModel,
+        showCategories: showCategories ?? this.showCategories,
+        priorityFirst: priorityFirst ?? this.priorityFirst,
+        showContactPhotos: showContactPhotos ?? this.showContactPhotos,
       );
 
   Map<String, dynamic> toJson() => {
@@ -154,6 +168,9 @@ class AppSettings {
         'assistEngine': assistEngine,
         'writingCloudModel': writingCloudModel,
         'assistCloudModel': assistCloudModel,
+        'showCategories': showCategories,
+        'priorityFirst': priorityFirst,
+        'showContactPhotos': showContactPhotos,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -179,6 +196,9 @@ class AppSettings {
         assistEngine: j['assistEngine'] as String? ?? 'local',
         writingCloudModel: j['writingCloudModel'] as String? ?? '',
         assistCloudModel: j['assistCloudModel'] as String? ?? '',
+        showCategories: j['showCategories'] as bool? ?? false,
+        priorityFirst: j['priorityFirst'] as bool? ?? false,
+        showContactPhotos: j['showContactPhotos'] as bool? ?? false,
       );
 }
 

@@ -1,3 +1,4 @@
+import '../../models/brief.dart';
 import '../../models/email_content.dart';
 import '../../models/search_plan.dart';
 import '../../models/triage.dart';
@@ -113,7 +114,8 @@ class EmailAi {
     for (var i = 0; i < emails.length; i++) {
       final e = emails[i];
       list.writeln('#${i + 1} | From: ${e.from} | Subject: ${e.subject}');
-      list.writeln('   ${e.forPrompt(maxBodyChars: 700).split('\n').skip(4).join(' ').trim()}');
+      final body = e.body.replaceAll(RegExp(r'\s+'), ' ').trim();
+      list.writeln('   ${body.length > 700 ? body.substring(0, 700) : body}');
     }
     return _writer.chat([
       const AiMessage.system(
@@ -262,6 +264,67 @@ class EmailAi {
       final idx = item['index'];
       if (idx is! int || idx < 0 || idx >= emails.length) continue;
       out[emails[idx].id] = Triage.fromJson(item.cast<String, dynamic>());
+    }
+    return out;
+  }
+
+  /// The "Catch me up" briefing: for each email, whether it needs the
+  /// user, a one-line takeaway and the action it calls for. Keyed by id.
+  Future<Map<String, BriefItem>> briefing(List<EmailContent> emails) async {
+    if (emails.isEmpty) return {};
+    final list = StringBuffer();
+    for (var i = 0; i < emails.length; i++) {
+      final e = emails[i];
+      var body = e.body.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (body.length > 500) body = '${body.substring(0, 500)}…';
+      list.writeln('[$i] From: ${e.from}\n    Subject: ${e.subject}\n    $body');
+    }
+    final json = await provider.completeJson([
+      AiMessage.system(
+          'You brief a busy person on their inbox. Today is ${_now().toIso8601String().substring(0, 10)}. '
+          'For each email return:\n'
+          'group — "attention" if a real person or institution needs something from the user (a reply, a decision, '
+          'a payment, a deadline, a security problem); "fyi" if it is useful to know but needs nothing; '
+          '"skip" for promotions, newsletters and routine notifications.\n'
+          'takeaway — one short sentence (max 16 words) that says what the user must do, with the key facts '
+          '(amounts, dates, names), e.g. "Send Priya your comments on the contract." or "Pay the \$84.20 power bill.". '
+          'For fyi and skip emails, just say what it is. Use facts from the email only; never invent anything.\n'
+          'action — "reply", "pay", "schedule" (an event or meeting), "review" (read or check something) or "none".\n'
+          'due — if the email names a deadline or due date, copy it exactly ("Thursday", "5 December"); otherwise "".\n'
+          'Return one item per email using its [index] as "index".'),
+      AiMessage.user(list.toString()),
+    ], model: fastModel, schema: {
+      'type': 'object',
+      'properties': {
+        'items': {
+          'type': 'array',
+          'items': {
+            'type': 'object',
+            'properties': {
+              'index': {'type': 'integer'},
+              'group': {
+                'type': 'string',
+                'enum': [for (final g in BriefGroup.values) g.name],
+              },
+              'takeaway': {'type': 'string'},
+              'action': {
+                'type': 'string',
+                'enum': [for (final a in BriefAction.values) a.name],
+              },
+              'due': {'type': 'string'},
+            },
+            'required': ['index', 'group', 'takeaway', 'action', 'due'],
+          },
+        },
+      },
+      'required': ['items'],
+    });
+    final out = <String, BriefItem>{};
+    for (final item in (json['items'] as List? ?? const [])) {
+      if (item is! Map) continue;
+      final idx = item['index'];
+      if (idx is! int || idx < 0 || idx >= emails.length) continue;
+      out[emails[idx].id] = BriefItem.fromJson(item.cast<String, dynamic>());
     }
     return out;
   }

@@ -33,6 +33,25 @@ class CannedAi extends AiProvider {
   Stream<String> chat(List<AiMessage> messages,
       {required String model, double temperature = 0.4, Map<String, dynamic>? jsonSchema}) async* {
     final sys = messages.first.content;
+    if (jsonSchema != null && sys.startsWith('You brief a busy person')) {
+      // One canned line per email, in the order the prompt lists them.
+      final n = RegExp(r'^\[\d+\]', multiLine: true).allMatches(messages.last.content).length;
+      const canned = [
+        ('attention', 'Send Sarah the headcount and cloud forecast for the budget review.', 'reply', 'Thursday'),
+        ('attention', 'Send Prof. Ruiz a revised proposal with two datasets.', 'reply', 'Monday Nov 23'),
+        ('attention', 'Tell Mom which day your Thanksgiving flight lands.', 'reply', ''),
+        ('fyi', 'Spring registration opens 30 November at 8 AM.', 'none', ''),
+      ];
+      final items = [
+        for (var i = 0; i < n; i++)
+          if (i < canned.length)
+            '{"index": $i, "group": "${canned[i].$1}", "takeaway": "${canned[i].$2}", "action": "${canned[i].$3}", "due": "${canned[i].$4}"}'
+          else
+            '{"index": $i, "group": "skip", "takeaway": "A routine update.", "action": "none", "due": ""}',
+      ];
+      yield '{"items": [${items.join(', ')}]}';
+      return;
+    }
     if (jsonSchema != null && sys.contains('Suggest exactly 3')) {
       yield '{"replies": ["I\'ll have the headcount and cloud forecast to you by Thursday EOD, and I\'ll join Friday\'s meeting.", '
           '"Numbers coming Thursday. I\'ll dial in to Friday\'s review on Zoom.", '
@@ -216,8 +235,10 @@ void main() {
     await tester.pumpWidget(app(state));
     await tester.tap(find.text('Summarize'));
     await tester.pump();
-    await tester.tap(find.text('Quick replies'));
-    await tester.pump();
+    await tester.tap(find.byTooltip('AI Tools'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Quick Replies').last);
+    await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 50));
     await snap(tester, '1_home');
   });
@@ -254,7 +275,7 @@ void main() {
     await tester.pumpWidget(app(state,
         home: const ComposePage(
             initialBody: 'Hi Mr. Patel,\n\nThe kitchen sink is leaking. Could you please arrange for a plumber to come by '
-                'this week?\n\n- I\'m home any evening after **5pm**\n- The leak is under the sink, near the pipe joint\n\nThanks,\nSid')));
+                'this week?\n\n- I\'m home any evening after **5pm**\n- The leak is under the sink, near the pipe joint\n\nThanks,\nAlex')));
     await tester.enterText(find.byType(TextField).first, 'Mr. Patel <landlord@example.com>');
     await snap(tester, '3_compose');
   });
@@ -273,8 +294,45 @@ void main() {
     size(tester, 1200, 800);
     final state = await sampleState();
     final uniMail = state.sessions[1].inboxMessages.first;
-    await tester.pumpWidget(app(state, home: ComposePage(replyTo: uniMail, initialBody: 'Hi Prof. Ruiz,\n\nThanks, will do.\n\nSid')));
+    await tester.pumpWidget(app(state, home: ComposePage(replyTo: uniMail, initialBody: 'Hi Prof. Ruiz,\n\nThanks, will do.\n\nAlex')));
     await snap(tester, '7_reply_from_uni');
+  });
+
+  for (final (w, h) in [(1100.0, 760.0), (820.0, 640.0)]) {
+    testWidgets('window at ${w.toInt()}×${h.toInt()} fits', (tester) async {
+      size(tester, w, h);
+      final state = await sampleState();
+      await tester.pumpWidget(app(state));
+      await tester.pump(const Duration(milliseconds: 100));
+      await snap(tester, '9_window_${w.toInt()}');
+    });
+  }
+
+  testWidgets('view options menu', (tester) async {
+    size(tester, 1440, 900);
+    final state = await sampleState();
+    await tester.pumpWidget(app(state));
+    await tester.tap(find.byTooltip('View Options'));
+    await tester.pumpAndSettle();
+    expect(find.text('Show Mail Categories'), findsOneWidget);
+    await snap(tester, '10_view_options');
+    await tester.tap(find.text('Show Mail Categories'));
+    await tester.pumpAndSettle();
+    expect(state.settings.showCategories, isTrue);
+  });
+
+  testWidgets('catch me up with actions', (tester) async {
+    size(tester, 1440, 900);
+    final state = await sampleState();
+    await tester.pumpWidget(app(state));
+    await tester.tap(find.byTooltip('Catch me up'));
+    for (var i = 0; i < 10; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('Needs You'), findsOneWidget);
+    expect(find.text('Reply'), findsWidgets);
+    await snap(tester, '11_catch_up');
   });
 
   testWidgets('phone-width layout', (tester) async {
