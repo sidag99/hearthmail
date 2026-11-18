@@ -1,0 +1,2369 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-18T14:31:57Z",
+  "files": {
+    "lib/main.dart": {
+      "overview": "The application entry point. It opens the persisted `SettingsStore`, constructs the one global `AppState`, mounts it with Provider and then starts account connection and AI discovery. The `HearthmailApp` widget defines the Material 3 theme for light and dark mode and picks the first screen: account setup on first run, the inbox otherwise. This is the file behind tour step 2.",
+      "sections": [
+        {
+          "title": "Bootstrap and global state",
+          "lineRange": [
+            1,
+            16
+          ],
+          "explanation": "`main()` calls `WidgetsFlutterBinding.ensureInitialized()` first because `SettingsStore.open()` uses platform plugins before `runApp`. A single `AppState` is created and provided with `ChangeNotifierProvider.value`, so every widget below can `watch`/`read` it. The tour describes this as a post-frame callback, but the code does not call `addPostFrameCallback`. It calls `runApp` and then awaits `state.init()`. `init()` yields at its first `await`, so Flutter can paint the first frame while IMAP connects. **Note:** the `material_ui` import (instead of `package:flutter/material.dart`) is a dependency declared in pubspec.yaml. Readers used to stock Flutter should know it is the source of `MaterialApp`, `ThemeData`, etc. here. Also, `.value` means Provider will not dispose `AppState`. Its timers and connections live for the whole process.",
+          "tourOrder": 2
+        },
+        {
+          "title": "Theme construction",
+          "lineRange": [
+            18,
+            36
+          ],
+          "explanation": "`buildTheme` is static so the light and dark themes come from one seed colour (`0xFF5B5BD6`) via `ColorScheme.fromSeed`. It turns on Material 3 and a compact visual density suited to a dense desktop mail client. It flattens the app bar (no elevation or scroll tint) and makes snack bars float at a fixed 420 px width, which the app uses for its toast and \"Undo send\" messages.",
+          "tourOrder": 2
+        },
+        {
+          "title": "Root widget and first-run routing",
+          "lineRange": [
+            38,
+            49
+          ],
+          "explanation": "`context.select<AppState, bool>` rebuilds `MaterialApp` only when \"has at least one account\" changes, not on every `notifyListeners()` from the busy `AppState`. That narrow subscription matters because `AppState` notifies very often (loading, sorting, indexing). Routing is done by swapping `home` instead of using a navigator. Adding the first account therefore replaces `AccountSetupPage(isFirstRun: true)` with `HomePage` automatically.",
+          "tourOrder": 2
+        }
+      ]
+    },
+    "analysis_options.yaml": {
+      "overview": "Static-analysis configuration for `flutter analyze` and IDEs. It adopts the standard `flutter_lints` rule set and excludes native platform folders and build output from analysis. The project adds no custom lint rules beyond the recommended set. It is part of the entry-point and packages step of the tour.",
+      "sections": [
+        {
+          "title": "Recommended lint set",
+          "lineRange": [
+            1,
+            10
+          ],
+          "explanation": "The header comments come from the Flutter template. The meaningful line is `include: package:flutter_lints/flutter.yaml`, which pulls in Flutter's recommended lints (the `flutter_lints` dev dependency in pubspec.yaml). Any warning you see in the IDE comes from this shared rule set, not from project-specific rules.",
+          "tourOrder": 2
+        },
+        {
+          "title": "Excluded paths",
+          "lineRange": [
+            12,
+            18
+          ],
+          "explanation": "`build/**` and the native runner folders (`android`, `ios`, `windows`, `macos`) are excluded from analysis. They contain generated or platform code, and including them would only add noise and slow the analyzer. Dart files in `lib/`, `test/` and `tool/` stay fully analyzed.",
+          "tourOrder": 2
+        },
+        {
+          "title": "Linter customization (unused)",
+          "lineRange": [
+            20,
+            36
+          ],
+          "explanation": "The `rules:` map has only commented-out examples, so the project runs the recommended set unchanged. The comments recommend suppressing rules locally with `// ignore:` instead of disabling them project-wide, which keeps the baseline strict. Because the `rules:` key has no entries, it parses as null. That is harmless, but you would add entries here to tighten style (for example `prefer_single_quotes`).",
+          "tourOrder": 2
+        }
+      ]
+    },
+    "macos/Runner/Release.entitlements": {
+      "overview": "The macOS App Sandbox entitlements used for release builds. Each key grants a capability that a feature depends on: outgoing network for IMAP/SMTP, OAuth and Ollama, an incoming network listener for the OAuth loopback redirect, and file access for attachments. It matches the debug entitlements, so features behave the same when signed for distribution (tour step 14).",
+      "sections": [
+        {
+          "title": "Property-list header",
+          "lineRange": [
+            1,
+            4
+          ],
+          "explanation": "A standard Apple property list. Xcode reads it at code-signing time and embeds the keys in the app's signature. Changing it requires a rebuild and re-sign. It is not read at runtime by Dart code.",
+          "tourOrder": 14
+        },
+        {
+          "title": "Network entitlements",
+          "lineRange": [
+            5,
+            8
+          ],
+          "explanation": "`network.client` lets the sandboxed app open outbound sockets for IMAP/SMTP, the OAuth token endpoints and the local Ollama server at `localhost:11434`. Without it, `AppState.friendlyError` would surface the \"Operation not permitted\" sandbox message. `network.server` is needed because OAuth sign-in runs a short-lived loopback HTTP server to catch the redirect. **Risk note:** a server entitlement in a release build is a broader permission, so the loopback listener should bind only to 127.0.0.1 and close promptly. That logic lives in `lib/services/oauth.dart`.",
+          "tourOrder": 14
+        },
+        {
+          "title": "Sandbox and file access",
+          "lineRange": [
+            9,
+            14
+          ],
+          "explanation": "`app-sandbox` is mandatory for Mac App Store distribution and confines the app to its container. `files.user-selected.read-write` allows reading files chosen in an open/save panel (adding attachments via `file_selector`). `files.downloads.read-write` lets `AppState.saveAttachment` write straight into `~/Downloads` without a dialog.",
+          "tourOrder": 14
+        },
+        {
+          "title": "Closing tags",
+          "lineRange": [
+            15,
+            16
+          ],
+          "explanation": "End of the dictionary and plist. Keep this file in sync with `DebugProfile.entitlements`. A capability present only in debug is a classic source of \"works in development, fails in release\" bugs.",
+          "tourOrder": 14
+        }
+      ]
+    },
+    "test/widget_test.dart": {
+      "overview": "Despite its template name, this file holds pure unit tests with no widgets, network, mail server or Ollama. It pins down the deterministic helpers the app relies on: `SearchPlan` query generation and lenient parsing, HTML-to-text conversion, remote-image blocking, cleanup of AI drafts, address parsing and Markdown-to-plain conversion. It is part of tour step 15's \"test the pure logic\" strategy.",
+      "sections": [
+        {
+          "title": "Imports",
+          "lineRange": [
+            1,
+            6
+          ],
+          "explanation": "Imports only the model and service libraries under test via `package:hearthmail/...`. No Flutter widget or `AppState` import is needed. This is why these tests run quickly and without a device.",
+          "tourOrder": 15
+        },
+        {
+          "title": "SearchPlan: IMAP, Gmail and JSON",
+          "lineRange": [
+            7,
+            45
+          ],
+          "explanation": "The first test fixes the exact IMAP SEARCH string. Multiple keywords become nested `OR TEXT` terms, dates use IMAP's `d-Mon-yyyy` format and unread maps to `UNSEEN`. The equivalent Gmail `X-GM-RAW` query is checked too. The second test covers quote escaping (`\\\"`) and that an empty plan becomes `ALL`, which prevents malformed server commands. The third shows that `fromJson` tolerates messy model output: blank keywords, empty strings, the literal `'null'` and unparseable dates are all dropped instead of throwing. That matters because the plan comes from an LLM.",
+          "tourOrder": 15
+        },
+        {
+          "title": "HTML helpers",
+          "lineRange": [
+            47,
+            61
+          ],
+          "explanation": "`htmlToText` must keep list structure (`- One`) and drop `<style>` contents, because the AI and the vector index read this text. `blockRemoteImages` must strip remote (tracking-pixel) images while keeping `cid:` inline images that are embedded in the message itself. That is the privacy rule from the safe-rendering step.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Draft cleanup and address parsing",
+          "lineRange": [
+            63,
+            77
+          ],
+          "explanation": "`EmailAi.cleanDraft` removes the chatter that local models often add (\"Here's a draft:\", a `Subject:` line, code fences) so only the body reaches the composer. `MailService.parseAddresses` accepts both `,` and `;` separators and display names. `markdownToPlain` produces the text/plain alternative for outgoing mail. These are string contracts, so exact-equality assertions are appropriate here.",
+          "tourOrder": 15
+        }
+      ]
+    },
+    "lib/models/account_config.dart": {
+      "overview": "Defines `AccountConfig`, the serializable connection settings for one IMAP/SMTP account, and `ProviderPreset`, a small catalogue of well-known providers. Secrets are deliberately not part of this model: passwords and OAuth tokens live in the keychain through `SettingsStore`. This is one of the shared domain models from tour step 4, used by setup, `MailService` and `AppState`.",
+      "sections": [
+        {
+          "title": "AuthType and constructor",
+          "lineRange": [
+            1,
+            17
+          ],
+          "explanation": "`AuthType` separates app-password accounts from Google/Microsoft OAuth. `AppState._credentialsFor` switches on it to build either `PasswordCredentials` or `OAuthCredentials`. The `const` constructor defaults to implicit-TLS ports (IMAP 993, SMTP 465), so most configs need only hosts and email. The doc comment states the key security decision: the password is never in this object.",
+          "tourOrder": 4
+        },
+        {
+          "title": "Fields and derived getters",
+          "lineRange": [
+            19,
+            39
+          ],
+          "explanation": "All fields are `final`, which makes the config an immutable value. To edit an account you replace it. `loginName` falls back to the email when no separate username is set. The TLS getters encode a port convention: SMTP uses STARTTLS on anything other than 465, and IMAP uses STARTTLS only on 143. A non-standard port, such as SMTP over implicit TLS on a custom port, would be misclassified. `isGmail` uses a host substring check. `AppState` uses it, for example, to skip indexing Sent mail because Gmail's All Mail already contains it.",
+          "tourOrder": 4
+        },
+        {
+          "title": "JSON serialization",
+          "lineRange": [
+            41,
+            67
+          ],
+          "explanation": "`toJson`/`fromJson` round-trip the non-secret fields. `authType` is stored by enum `name`. `fromJson` is defensive: missing optional fields fall back to defaults, and an unknown `authType` string falls back to `password` via `orElse`, so old settings files keep loading. Required fields (`id`, `email`, hosts) are cast directly and will throw if they are absent, so a corrupt entry fails loudly rather than producing a half-empty account.",
+          "tourOrder": 4
+        },
+        {
+          "title": "Provider presets",
+          "lineRange": [
+            69,
+            127
+          ],
+          "explanation": "`ProviderPreset` holds the server settings and user-facing help for Gmail, iCloud, Fastmail and Yahoo. The help text explains the provider's app-password requirement and links to the page where you create one, which is the most common stumbling block for IMAP clients. Only iCloud overrides the SMTP port (587, STARTTLS). `all` is a `const` list, so presets cost nothing at runtime.",
+          "tourOrder": 4
+        },
+        {
+          "title": "Lookup by email domain",
+          "lineRange": [
+            129,
+            137
+          ],
+          "explanation": "`forEmail` takes the domain after the last `@`, lowercases it and finds the first preset that claims it. It returns `null` for unknown domains, and the setup page then falls back to autoconfig discovery or manual entry. A linear scan is fine for four presets.",
+          "tourOrder": 4
+        }
+      ]
+    },
+    "lib/services/ai/ollama_provider.dart": {
+      "overview": "The concrete `AiProvider` that talks to a local Ollama server over HTTP. It implements model listing (`/api/tags`), streaming chat with optional JSON-schema output (`/api/chat`) and batched embeddings (`/api/embed`). It also translates connection and HTTP failures into user-readable `AiException`s. It is the middle tier of the pluggable AI layer in tour step 5, and every AI feature and the semantic index go through it.",
+      "sections": [
+        {
+          "title": "Construction and shared settings",
+          "lineRange": [
+            1,
+            25
+          ],
+          "explanation": "The base URL defaults to `http://localhost:11434`, so no email content leaves the machine. An `http.Client` can be injected for testing. `contextTokens` is fixed at 8192 for every request on purpose: Ollama reloads a model when `num_ctx` changes, so a constant window avoids slow reloads between features. `_uri` strips trailing slashes from a user-entered base URL to avoid `//api/...` paths.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Listing installed models",
+          "lineRange": [
+            27,
+            49
+          ],
+          "explanation": "A cheap `GET /api/tags` with a 5-second timeout serves as both health check and model discovery. `AppState.refreshAi` calls it at startup and when settings change. `SocketException` and `TimeoutException` become friendly messages (\"Is the Ollama app running?\"). Names are sorted so pickers are stable. A malformed body would throw a raw cast error instead of an `AiException`.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Streaming chat",
+          "lineRange": [
+            51,
+            95
+          ],
+          "explanation": "`chat` is an `async*` generator that yields text chunks as they arrive, so UI like `AiStreamView` can render progressively. The request disables `think` (hidden reasoning is slow and not needed for email tasks) and sets `keep_alive: 30m` to keep the model warm. `'format': ?jsonSchema` uses Dart's null-aware map element: the key is included only when a schema is passed. Ollama then constrains output to that JSON schema. The response is newline-delimited JSON. Each line is decoded, `error` objects are raised and the loop stops on `done`. **Risk:** unlike the other calls there is no timeout, so a stalled server leaves the stream waiting until the consumer cancels it.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Batch embeddings",
+          "lineRange": [
+            97,
+            117
+          ],
+          "explanation": "`embed` sends many inputs in one `/api/embed` call with `truncate: true`, so long emails are cut by the server instead of failing. It uses a generous 2-minute timeout because indexing batches (16 emails at a time from `AppState`) can be slow on modest hardware. It returns `List<List<double>>` converted from JSON numbers. `VectorIndex` later truncates and normalizes them.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Error text and cleanup",
+          "lineRange": [
+            119,
+            134
+          ],
+          "explanation": "`_errorText` parses Ollama's error JSON. It recognizes the common \"model not found\" case and turns it into an actionable hint (`ollama pull <model>`). Any parse failure falls back to the bare HTTP status. `close()` releases the HTTP client. `AppState.refreshAi` closes the old provider before creating a new one when the URL changes.",
+          "tourOrder": 5
+        }
+      ]
+    },
+    "lib/services/vector_index.dart": {
+      "overview": "A tiny per-account vector database for semantic search. It stores one normalized embedding per email in memory and in a compact custom binary file, and answers queries by an exact cosine-similarity scan. `EmbeddingFormat` adds the task prefixes each embedding model expects for queries and documents. This file is the core of the \"semantic\" tier in tour step 9. `AppState` fills it in the background and fuses its hits with IMAP results.",
+      "sections": [
+        {
+          "title": "Imports and IndexedMail",
+          "lineRange": [
+            1,
+            19
+          ],
+          "explanation": "`IndexedMail` holds just enough to fetch a hit again from the server: a stable `key`, the folder `path`, the IMAP `uid` and a `date`. The date is used to evict the oldest mail. Message bodies are not stored, so a search hit costs one `fetchByUids` round trip, but the index file stays small.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Design, limits and lookups",
+          "lineRange": [
+            21,
+            60
+          ],
+          "explanation": "The class comment states the design choice: at 20,000 emails \u00d7 512 dims (~40 MB), a brute-force scan takes about 10 ms. That beats approximate indexes like HNSW on both accuracy and simplicity. `dims = 512` relies on Matryoshka-style models where leading dimensions carry most meaning, a choice measured in `tool/model_bench.dart`. Storage is parallel lists (`_entries`, `_vectors`) plus a `_pos` key\u2192index map for O(1) `contains`. `oldestIn` and `countIn` are linear scans, which is fine at this size.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Normalize, add, remove, search",
+          "lineRange": [
+            62,
+            120
+          ],
+          "explanation": "`_prepare` truncates to `dims` and L2-normalizes, so similarity becomes a plain dot product. Zero vectors are left as zeros to avoid division by zero. `add` upserts by key. `remove` swaps the last element into the hole (O(1) delete) and fixes its `_pos`, so insertion order is not preserved. `search` scores every vector, keeps those at or above `minScore`, sorts descending and returns Dart record tuples `(IndexedMail, double)`. `AppState` uses thresholds measured for embeddinggemma (0.25 for candidates, 0.4 for \"related\" keyword-search extras).",
+          "tourOrder": 9
+        },
+        {
+          "title": "Binary save with eviction",
+          "lineRange": [
+            122,
+            171
+          ],
+          "explanation": "`scheduleSave` debounces bursts of `add` calls into one write after 3 s. `save` first evicts the oldest entries beyond `maxEntries`. It then writes a little-endian format: magic `LMVI`, version 1, the model name, then per entry key/path/uid/int64 millis/float32 vector. It writes to `.tmp` and `rename`s, which makes the replace atomic and protects against a half-written file. **Gotchas:** `_dirty` is cleared before eviction, which calls `remove` and sets it again, so the next scheduled save rewrites the file unnecessarily. `_dirty` is also cleared before the write, so a failed write is not retried until the index changes. Two overlapping `save()` calls would share the same `.tmp` path.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Loading and deleting",
+          "lineRange": [
+            173,
+            233
+          ],
+          "explanation": "`open` sanitizes the account id into a filename under the app-support directory and parses the format with small `u32`/`str` closures over a `ByteData` cursor. A wrong magic number, a wrong version or a **different model name** returns an empty index: vectors from different models are not comparable, so a model switch silently triggers re-indexing. Any parse error clears everything (\"a damaged index only costs re-indexing\"). That is a sensible failure mode for a cache. `delete` cancels the pending save and removes the file, for account removal and \"Rebuild index\".",
+          "tourOrder": 9
+        },
+        {
+          "title": "EmbeddingFormat prompts",
+          "lineRange": [
+            235,
+            268
+          ],
+          "explanation": "Embedding models are trained with specific task prefixes. `EmbeddingFormat` detects the model family by name (embeddinggemma, qwen3-embedding, nomic) and wraps queries and documents accordingly. Unknown models get raw text. Documents are compacted to one line, capped at 1500 body characters, and include sender and ISO date, so queries like \"invoice from Chase last month\" can match on metadata as well as content.",
+          "tourOrder": 9
+        }
+      ]
+    },
+    "lib/ui/widgets/ai_widgets.dart": {
+      "overview": "Three reusable widgets that give AI output a consistent look: `MarkdownText` renders the small Markdown subset the models produce, `AiStreamView` shows a model's streamed answer as it arrives, and `AiCard` is the tinted container that marks content as AI-generated. They appear in the reading pane (summaries, Catch me up) and elsewhere, as described in tour step 10.",
+      "sections": [
+        {
+          "title": "Inline bold parsing",
+          "lineRange": [
+            1,
+            25
+          ],
+          "explanation": "`MarkdownText.inline` splits a line on a non-greedy `**...**` regex into plain and semi-bold `TextSpan`s. It is a static helper so other widgets can reuse it. It handles only bold. Italics, links and code are rendered literally. That is a deliberate scope limit: the prompts ask models for simple formatting, and a full Markdown renderer would be heavier and more permissive.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Line-based Markdown layout",
+          "lineRange": [
+            27,
+            67
+          ],
+          "explanation": "`build` works line by line. Blank lines become small spacers. Lines matching `-`, `*`, `\u2022` or `1.` become a `Row` with a bullet or number and wrapped text, indented when the marker is not at the line start. `#` headings become semi-bold text. Everything is wrapped in a `SelectionArea` so users can select and copy parts of an AI answer. The bullet regex requires whitespace after the marker, so a line starting with `**bold**` is not mistaken for a bullet.",
+          "tourOrder": 10
+        },
+        {
+          "title": "AiStreamView",
+          "lineRange": [
+            69,
+            142
+          ],
+          "explanation": "Takes a `start` factory rather than a stream, and calls it once in `initState`, so the request is not re-issued on rebuilds. Chunks are appended to a `StringBuffer` with `setState`, and the subscription is cancelled in `dispose`, which stops the HTTP stream when the card closes. Errors are shown inline in the theme's error colour, and a Copy button appears only once the stream is done. `onDone` lets callers capture the final text, for example to cache a summary. **Gotcha:** there is no `didUpdateWidget`, so passing a new `start` to an existing widget does nothing. Callers must change the widget's `key` to restart generation.",
+          "tourOrder": 10
+        },
+        {
+          "title": "AiCard",
+          "lineRange": [
+            144,
+            188
+          ],
+          "explanation": "A full-width container tinted with `primaryContainer` at 35% opacity, with a sparkle (`auto_awesome`) icon and title. It visually tags content as machine-generated, which is an honesty and UX choice for an AI mail client. `?trailing` is Dart's null-aware collection element: the trailing widget is inserted only when it is non-null. The close button is optional via `onClose`.",
+          "tourOrder": 10
+        }
+      ]
+    },
+    "lib/state/app_state.dart": {
+      "overview": "`AppState` is the central `ChangeNotifier` and the hub of the dependency graph. It owns every connected account session, the current view and selection, message actions, sending (undo, scheduling, follow-ups), local organization rules (snooze, VIP, block, mute), AI setup, background inbox triage, semantic indexing and the three-tier search. UI widgets watch it and call its methods, and it orchestrates `MailService`, `EmailAi`/`OllamaProvider`, `TriageCache`, `UserData` and `VectorIndex`. Most later tour steps (3, 8, 9, 12, 13) point back to a region of this file.",
+      "sections": [
+        {
+          "title": "Imports and view/session types",
+          "lineRange": [
+            1,
+            124
+          ],
+          "explanation": "`ViewKind` plus `MailView`'s const named constructors give cheap, comparable value objects for \"what is the list showing\", with `==`/`hashCode` overridden so views can be compared and used as keys. `isInboxBased` marks views derived from every account's inbox. `Toast` is a UI-agnostic message with an optional action. `OutgoingMail` captures everything needed to send or reopen a message (used for undo and failure recovery). `AccountSession` is the mutable per-account bag: connection, mailboxes, paged inbox, triage cache, and a vector index with its own separate `indexService` connection.",
+          "tourOrder": 3
+        },
+        {
+          "title": "AppState core and AI model selection",
+          "lineRange": [
+            126,
+            258
+          ],
+          "explanation": "Settings and accounts load synchronously from the store in the constructor. Toasts and undone sends are exposed as broadcast `Stream`s, so one-off events do not live in state, but events emitted when no widget is listening are dropped. `refreshAi` rebuilds the `OllamaProvider`, lists models and repairs settings that point to uninstalled models. `_pickDefault` parses parameter counts like `12b` from model names and prefers the one closest to 12B. `embeddingModel`/`translationModel` resolve to installed models or `''`. `updateSettings` clears and reindexes all vectors when the effective embedding model changes, because vectors from different models cannot be compared.",
+          "tourOrder": 3
+        },
+        {
+          "title": "Accounts: connect, add, remove",
+          "lineRange": [
+            260,
+            417
+          ],
+          "explanation": "Messages from enough_mail are not wrapped. Instead, two `Expando`s attach the owning session and mailbox to each `MimeMessage` (`_tag`), so any message in any list can find its account and folder. `init` loads `UserData`, discovers AI, starts a 30 s tick timer, connects all accounts in parallel, then starts a 3-minute refresh, auto-sort and indexing in the background. `_connect` turns credentials into a `MailService`, opens the triage cache, picks the inbox and records failures as friendly strings instead of throwing. `removeAccount` deletes keychain secrets (`deletePassword` removes both password and OAuth token), the triage cache and the vector file, then resets any view or selection pointing at that account.",
+          "tourOrder": 3
+        },
+        {
+          "title": "Views, filtering, paging and refresh",
+          "lineRange": [
+            419,
+            680
+          ],
+          "explanation": "`allInboxMessages` merges every account's inbox newest-first and memoizes it in `_mergedCache`. Every mutation must reset that cache to null, which the code does in many places and which is easy to forget when adding features. `_sortDate` makes a due snooze sort as if it just arrived. `_hiddenFromInbox` hides snoozed, blocked and muted mail. `_viewMessages` derives Priority/Needs reply/Category/VIP views from triage verdicts. Paging assumes 40 messages per page (`>= 40` means \"has more\") and de-duplicates by UID. `refresh` fetches the newest page, prepends unseen UIDs, and in quiet mode also retries failed accounts. `openFolder` and `loadMore` guard against races with `if (folderBox != box) return` after awaits.",
+          "tourOrder": 3
+        },
+        {
+          "title": "Opening messages and actions",
+          "lineRange": [
+            682,
+            766
+          ],
+          "explanation": "`openMessage` selects first (instant UI), then downloads the full body only if needed and swaps the full message into every list via `_replaceMessage`, re-tagging it with the Expandos. It then marks the message seen. Every action goes through `_act`, which runs the server operation, removes the message locally if it moved, and auto-selects the next message at the same index, which gives Apple-Mail-like keyboard triage. Errors become toasts, and the list is not updated optimistically, so the UI changes only after the server confirms.",
+          "tourOrder": 3
+        },
+        {
+          "title": "Sending, scheduling and the tick loop",
+          "lineRange": [
+            768,
+            1012
+          ],
+          "explanation": "`sendMail` delays delivery by `undoSendSeconds` using a `Timer` per pending message. Undo cancels it and emits on `undoneSends` so the composer can reopen. **Risk:** pending sends exist only in memory, and `dispose` cancels them, so quitting during the undo window drops the message silently. Scheduled mail copies attachments into an app-support outbox and is persisted in `UserData`. It is sent by `_tick` only while the app is running, which the UI states. `_sendScheduled` removes the item before sending to avoid double sends and re-adds it on failure. A crash mid-send can still lose it. `_afterSent` learns contacts and records follow-ups, which `_tick` clears when a reply's `In-Reply-To`/`References` mentions the Message-ID.",
+          "tourOrder": 12
+        },
+        {
+          "title": "Organizing: snooze, VIP, block, mute, unsubscribe, files",
+          "lineRange": [
+            1014,
+            1250
+          ],
+          "explanation": "All of these rules live locally in `UserData`, not on the IMAP server. `snooze` keys reminders by `MailService.keyOf`. `_bringBack` re-fetches the message by UID if needed, marks it unread and shows a toast. `_remindedKeys` is in memory and due snoozes are not removed by `_tick`, so after a restart a due reminder can fire its toast again. `_applyRules` moves blocked senders' mail to Junk and archives muted threads (unless flagged) after every fetch, and swallows errors so the next fetch retries. `unsubscribe` tries RFC 8058 one-click POST, then mailto, then opening the web page. The POST has no timeout. Attachment saving sanitizes filenames and avoids overwriting with ` (n)` suffixes.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Semantic indexing",
+          "lineRange": [
+            1252,
+            1427
+          ],
+          "explanation": "`indexAll` is single-flight: a call while one is running sets `_indexAgain` and reruns once afterwards. `_indexAccount` uses a separate `indexService` IMAP connection so background indexing does not block the UI connection. It walks the search folder (and Sent, except on Gmail) in pages of 100 headers, fetches full text only for unindexed UIDs (in batches of 25), and stops after 3 fully-known pages. `_indexMessages` embeds 16 at a time. `_semanticSearch` embeds the query with the model's prefix, searches each account's `VectorIndex` (minScore 0.25), groups hits by folder to fetch them back by UID, and evicts entries whose mail no longer exists. `_lastScores` is a shared field, so overlapping searches can overwrite each other's scores.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Background AI triage",
+          "lineRange": [
+            1429,
+            1490
+          ],
+          "explanation": "`sortInboxes` collects inbox messages that are not in each account's `TriageCache`, sorts them newest-first so the visible mail is classified first, and sends them to `EmailAi.triage` in batches of 10. Progress (`sortDone/sortTotal`) is published after each batch. Like indexing, it is single-flight with a `_resortRequested` rerun flag, and `force` clears the caches for a full re-sort. AI failures stop the run with a toast and leave the partial results cached.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Search, errors, test hooks and dispose",
+          "lineRange": [
+            1492,
+            1720
+          ],
+          "explanation": "`search` saves the previous view to restore later and scopes to the open folder or every account's search folder. It starts semantic search in parallel. Keyword mode runs IMAP search, then appends up to 10 semantic \"related\" hits scoring at least 0.4. AI mode has `EmailAi.planSearch` produce a `SearchPlan`, widens it if keywords found nothing, fuses IMAP and semantic lists with reciprocal rank fusion (`1/(60+rank)`), and has the model rank the top 30. `friendlyError` maps raw IMAP/OAuth/socket errors to plain advice by substring matching. `debugLoad` (`@visibleForTesting`) injects sample data for widget tests and screenshots. `dispose` cancels timers and pending sends, saves vectors and disconnects, but does not await these futures.",
+          "tourOrder": 9
+        }
+      ]
+    },
+    "lib/ui/compose_page.dart": {
+      "overview": "ComposePage is the single editor screen for every kind of outgoing mail: new messages, replies and reply-all, forwards (with the original attachments), follow-up nudges, and restoring a message after Undo send or a failed send. It keeps its own form state in TextEditingControllers, but delegates sending, drafts, signatures, contacts and templates to AppState and UserData, and streams AI output from EmailAi straight into the body field. It is the main UI consumer of the writing half of the AI layer (Step 5) and the producer of OutgoingMail objects that AppState sends (Step 12).",
+      "sections": [
+        {
+          "title": "Constructor modes",
+          "lineRange": [
+            1,
+            48
+          ],
+          "explanation": "The widget's optional parameters double as its *mode*: `replyTo`, `forwardOf`, `restore` and `followUpOf` are mutually exclusive in practice, while `aiReplyInstruction` and `initialBody` modify a mode. Note the doc comment on `aiReplyInstruction`: a non-null but empty string still triggers an AI draft, so `null` vs `''` is meaningful. Importing `pickDateTime` from message_view.dart with `show` couples two screens; it works but suggests the helper could live in a shared widgets file.",
+          "tourOrder": 12
+        },
+        {
+          "title": "Form state fields",
+          "lineRange": [
+            50,
+            82
+          ],
+          "explanation": "All editor state lives here: one controller per field, a per-recipient-field `FocusNode` map for autocomplete, and flags for preview, Cc visibility, AI writer and attachment loading. `_generating` is derived from whether an AI stream subscription exists, so there is no separate boolean to keep in sync. `_initialSnapshot` is `late final` because it can only be taken after `initState` has filled the fields.",
+          "tourOrder": 12
+        },
+        {
+          "title": "initState: prefill per mode",
+          "lineRange": [
+            84,
+            159
+          ],
+          "explanation": "This block decides the sending account (restore, then the account that received the original, then the default) and prefills fields for each mode. Reply-all removes your own address and the reply-to targets from Cc; `Re:`/`Fwd:` prefixes are only added when missing. AI work (follow-up draft, AI reply) is deferred with `addPostFrameCallback` because `_runAi` calls `setState`, which is not allowed during `initState`. The `_dirty` getter compares a NUL-joined snapshot so the leave-confirmation only fires after real edits. Gotcha: `initialBody` is applied after a `restore`, so passing both would overwrite the restored body, and the snapshot is taken before forwarded attachments finish loading, so a forward counts as dirty as soon as they arrive.",
+          "tourOrder": 12
+        },
+        {
+          "title": "Reply language and forwarded files",
+          "lineRange": [
+            161,
+            190
+          ],
+          "explanation": "`_detectReplyLanguage` asks EmailAi (offline guess first, model second) what language the original is in, and only offers a translate-on-reply chip when it differs from the user's language setting. `_loadForwardedAttachments` downloads the original's attachments to local files through AppState and shows a loading chip meanwhile; both check `mounted` after the await, the standard guard against using a disposed State. `dispose` cancels any running AI stream and frees every controller and focus node."
+        },
+        {
+          "title": "Streaming AI into the body",
+          "lineRange": [
+            192,
+            255
+          ],
+          "explanation": "`_runAi` is the shared engine for every AI writing tool: it saves the current text for Undo AI, clears the body, and appends each streamed chunk so the user watches the draft appear. When the stream finishes, `EmailAi.cleanDraft` strips code fences, preambles and stray Subject lines that small models add; on error the previous text is restored. `_stopAi` cancels mid-stream and keeps what was written so far. The body field is set `readOnly` while generating (see build), which prevents user edits from being overwritten by the next chunk.",
+          "tourOrder": 12
+        },
+        {
+          "title": "Building and sending mail",
+          "lineRange": [
+            257,
+            378
+          ],
+          "explanation": "`_finalBody` appends the per-account signature (using the standard `-- ` delimiter, and skipping it if already present), then either a forwarded-message block or a `>`-quoted original, so quoting happens in plain text before Markdown-to-HTML conversion in MailService. `_validate` parses all address fields up front so bad input fails in the UI rather than at SMTP time. `_send` confirms an empty subject, refuses immediate sends from a disconnected account (scheduled sends are allowed), then hands an `OutgoingMail` to `AppState.sendMail`, which owns the undo-send delay. `_sendLater` offers preset times plus a custom picker; as its own help text says, scheduling only works while the app is running. Risk: the Cmd+Enter shortcut calls `_send` directly, bypassing the disabled state the Send button has while AI is generating or attachments are loading.",
+          "tourOrder": 12
+        },
+        {
+          "title": "Leaving, drafts and templates",
+          "lineRange": [
+            380,
+            469
+          ],
+          "explanation": "`_confirmLeave` offers Discard, Keep editing or Save draft, and only allows leaving if the draft save succeeded, so a network failure never silently loses work. Templates use a heterogeneous dialog result (`Object`): a `Template` inserts its body, a Dart record `('delete', t)` removes it, and the string `'save'` stores the current body. This pattern-by-type approach avoids defining a result enum but means the dialog contract is only enforced at runtime."
+        },
+        {
+          "title": "build: scaffold and fields",
+          "lineRange": [
+            473,
+            663
+          ],
+          "explanation": "`PopScope(canPop: !_dirty)` intercepts back navigation only when there are unsaved changes and routes it through `_confirmLeave`. The app bar holds attach, templates, Markdown preview, a follow-up reminder menu and a split Send / Send later button, both disabled while generating or loading attachments. The preview renders the body with `markdown`'s GitHub extension set through `HtmlWidget`, mirroring how MailService sends Markdown as HTML. The footer reveals behaviour that happens at send time (signature, quoted original, follow-up reminder) so it is not a surprise."
+        },
+        {
+          "title": "From picker and recipient autocomplete",
+          "lineRange": [
+            665,
+            761
+          ],
+          "explanation": "The From dropdown appears only with multiple accounts and flags disconnected ones. `_recipientField` wraps `RawAutocomplete` around the shared controller: suggestions come from `UserData.suggestContacts` for the token after the last comma or semicolon, and selection rebuilds the field with a properly formatted `Name <email>` (quoting names containing commas). The `?trailing` syntax is Dart's null-aware collection element: it adds the widget only when it is non-null."
+        },
+        {
+          "title": "AI toolbar and writer",
+          "lineRange": [
+            763,
+            850
+          ],
+          "explanation": "The toolbar shows a progress row with Stop while generating, otherwise chips: Write for me, one chip per `RewriteStyle`, a one-tap translate into the detected reply language, a translate menu and Undo AI. Translations here pass `forSending: true` so EmailAi uses the writing model, which produces more natural foreign text. `_aiWriter` is a prompt box that composes from notes when the body is empty or applies a free-form `customEdit` when there is text. Note that the email body and user prompts are sent verbatim to the model; that is fine locally, but malicious content in a quoted email can still steer the output, so users should read AI drafts before sending.",
+          "tourOrder": 12
+        }
+      ]
+    },
+    "lib/services/ai/email_ai.dart": {
+      "overview": "EmailAi is the feature layer of the local AI stack: every assistant capability (summaries, Catch me up digests, quick replies, reply drafting, composing, rewriting, subject suggestions, triage, search planning and ranking, Q&A, translation and event extraction) is a prompt plus model choice on top of an abstract AiProvider. It depends only on the plain models from Step 4 and has no Flutter imports, so it can run from tests and command-line tools. Step 5 presents it as the top of the three AI tiers; the UI screens and AppState call into it.",
+      "sections": [
+        {
+          "title": "RewriteStyle enum",
+          "lineRange": [
+            1,
+            19
+          ],
+          "explanation": "An enhanced enum where each value carries a UI label and the exact instruction sent to the model. Keeping label and prompt together means adding a style automatically adds a chip in ComposePage, which iterates `RewriteStyle.values`.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Configuration and writer rules",
+          "lineRange": [
+            21,
+            67
+          ],
+          "explanation": "The constructor takes two main models: a fast one for structured jobs and a writing model for text the user may send, plus optional translation and embedding models. An injectable `clock` makes date-dependent prompts deterministic in tests. `_writerRules` is a shared system prompt built with collection-if, enforcing body-only output, no invented facts (use `[placeholder]` instead), a sign-off with the user's first name and the user's personal style notes. Centralizing these rules keeps compose, draft-reply and similar features consistent.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Reading: summary and digest",
+          "lineRange": [
+            69,
+            102
+          ],
+          "explanation": "`summarize` streams a fixed Markdown template (TL;DR, action items, key dates) from the fast model at low temperature for accuracy. `digest` powers Catch me up: it builds a numbered list of emails with trimmed bodies (skipping the first four header lines of `forPrompt`) and asks the writing model to group them into attention buckets. The `skip(4)` silently depends on the exact header layout of `EmailContent.forPrompt`; if that format changes, the digest input breaks quietly.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Replying and writing",
+          "lineRange": [
+            104,
+            179
+          ],
+          "explanation": "`quickReplies` uses `completeJson` with a JSON schema so the model must return `{replies: [...]}`, and the result is defensively filtered and capped at three. `draftReply`, `compose`, `rewrite` and `customEdit` all return `Stream<String>` so ComposePage can show tokens live; grammar fixes use a very low temperature to discourage creative changes. `suggestSubject` post-processes the reply to strip a `Subject:` prefix and quotes, a common pattern when small models ignore formatting instructions. Email text goes into prompts verbatim, so a hostile email could attempt prompt injection; the output is only ever a suggestion the user reviews.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Triage",
+          "lineRange": [
+            181,
+            240
+          ],
+          "explanation": "Triage sends a batch of compact email previews and a schema whose `category` and `priority` enums are generated from the `MailCategory` and `MailPriority` Dart enums, so the prompt and the model stay in sync. Results are matched back by index, and every index is bounds-checked before use because model output is untrusted. The prompt carefully defines high priority, needs_reply and suspicious (phishing), which feeds the smart inbox and phishing banners.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Search: plan, rank, answer",
+          "lineRange": [
+            242,
+            317
+          ],
+          "explanation": "`planSearch` turns a natural-language query into a `SearchPlan` (keywords, sender, date range, flags), injecting today's date and weekday so relative ranges like 'last week' can be resolved. `rankResults` asks the model to reorder candidates and drops duplicates and out-of-range indexes with a `seen` set. `answerFromEmails` is a small retrieval-augmented Q&A: found emails become the context, and the prompt tells the model to cite the sender/subject and admit when the answer is missing.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Translation",
+          "lineRange": [
+            319,
+            372
+          ],
+          "explanation": "`detectLanguage` tries the free offline `Languages.guess` first and only calls the model when unsure, swallowing errors to return null. `translate` is an `async*` generator that truncates very long input, picks the dedicated translation model for reading but the writing model when `forSending`, and switches to TranslateGemma's exact training prompt when that model is used, a detail backed by the project's model benchmark.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Calendar extraction and cleanup",
+          "lineRange": [
+            374,
+            429
+          ],
+          "explanation": "`extractEvent` asks for a single event with ISO dates, then validates: `found` must be true, `start` must parse, and an `end` before `start` is discarded. `cleanDraft` is a static post-processor used by ComposePage to remove code fences, 'Here is...' preambles and a leading Subject line. The date helpers build `YYYY-MM-DD` manually instead of pulling in `intl`, keeping this file dependency-light.",
+          "tourOrder": 5
+        },
+        {
+          "title": "EmailEvent and .ics export",
+          "lineRange": [
+            431,
+            464
+          ],
+          "explanation": "`EmailEvent` is a small value class whose `toIcs` writes an RFC 5545 calendar file with CRLF line endings and escaped text. Missing ends default to one hour (or one day for all-day events). Times are written without a `TZID` or `Z`, i.e. as floating local times, which matches how the model was told to report them but means the event is interpreted in whatever time zone the calendar app uses. The UID is a timestamp, unique enough for one-off imports.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Languages helper",
+          "lineRange": [
+            466,
+            554
+          ],
+          "explanation": "`Languages` provides picker names, ISO codes for the TranslateGemma prompt and a fast heuristic `guess`: first by Unicode script ranges (with Han resolved to Japanese if kana appear, and Cyrillic/Arabic left undecided because many languages share them), then by stop-word counts for Latin-script languages, returning only a clear winner. Risk: `code` falls back to `substring(0, 2)`, which throws a RangeError for a one-letter language name; names in normal use are safe.",
+          "tourOrder": 5
+        }
+      ]
+    },
+    "lib/services/email_html.dart": {
+      "overview": "EmailHtml (the `EmailDocument` class) converts untrusted email bodies into safe, self-contained HTML pages for the reading pane. For HTML mail it sanitizes the DOM, blocks remote content and tracking pixels unless allowed, embeds `cid:` inline images, folds quoted history and injects a strict, nonce-based Content-Security-Policy. For plain-text mail it escapes, linkifies, nests quotes and dims signatures. Step 11 describes it as the first half of safe rendering; EmailWebView displays its output.",
+      "sections": [
+        {
+          "title": "EmailDocument and the CSP",
+          "lineRange": [
+            1,
+            39
+          ],
+          "explanation": "The class doc lists the security goals. `_nonce` uses `Random.secure()` for a fresh value per document, and `_csp` builds a policy that defaults to `'none'` and only lets the script carrying that nonce run. Remote images, styles and fonts are allowed only when `allowRemote` is true; frames, forms and `<base>` are always forbidden. This is defense in depth: even if sanitizing misses something, the CSP stops it from executing or phoning home.",
+          "tourOrder": 11
+        },
+        {
+          "title": "Stylesheets",
+          "lineRange": [
+            41,
+            74
+          ],
+          "explanation": "Three CSS blocks: a base style that makes mail readable and images responsive and styles the folded-quote `\u2022\u2022\u2022` summary; a plain-text style for wrapped text, quotes and signatures; and a dark palette applied only to plain-text mail. HTML emails always render on a light page (`color-scheme: light`) because senders design them for white backgrounds.",
+          "tourOrder": 11
+        },
+        {
+          "title": "Fit-to-width script",
+          "lineRange": [
+            76,
+            90
+          ],
+          "explanation": "The only script allowed to run, tagged with the nonce. It sets CSS `zoom` on the body when content is wider than the viewport, with a 0.35 lower bound, and re-runs on load, resize, DOMContentLoaded and two timeouts to catch late-loading images. This is why EmailWebView must enable JavaScript.",
+          "tourOrder": 11
+        },
+        {
+          "title": "fromHtml: sanitize and block",
+          "lineRange": [
+            92,
+            140
+          ],
+          "explanation": "Dangerous elements (scripts, frames, objects, `<base>`, `meta http-equiv`, HTML imports) are removed, then every `on*` event attribute and `javascript:` hrefs are stripped. `cid:` images are replaced with data URIs from the message. Blocked remote images become a transparent GIF with their aspect ratio preserved, while 1-2 px images (typical tracking pixels) are removed entirely. Note the sanitizer is a deny-list: `javascript:` is only checked on `href` and `[background]` attributes are counted but left in place, so the CSP is what actually prevents those from loading or running.",
+          "tourOrder": 11
+        },
+        {
+          "title": "fromHtml: assemble the page",
+          "lineRange": [
+            141,
+            158
+          ],
+          "explanation": "After folding quotes, our own `<meta>` tags (charset, CSP, viewport, color-scheme) and base CSS are inserted at the very start of `<head>`, creating a head if the email lacks one, so the CSP applies before any email content is parsed. The fit script is appended to the body and the result is returned with the blocked-image count, which the UI uses for its 'Load images' banner.",
+          "tourOrder": 11
+        },
+        {
+          "title": "fromPlain and linkify",
+          "lineRange": [
+            160,
+            187
+          ],
+          "explanation": "Plain-text mail gets a fully synthesized page with the same CSP, optional dark styles and the fit script. `_linkify` runs on already-escaped text and turns URLs, `www.` hosts and bare email addresses into links, excluding trailing punctuation from URLs. Escaping first and linkifying second is the safe order: no raw user text can become markup.",
+          "tourOrder": 11
+        },
+        {
+          "title": "plainToHtml: quotes and signature",
+          "lineRange": [
+            189,
+            253
+          ],
+          "explanation": "A two-pass algorithm. The first pass finds where quoted history starts, either a `>` line or a localized attribution ('On ... wrote:', German, French, Spanish, Outlook headers), but only if at least 60% of the remaining non-empty lines are quoted, avoiding folding inline replies. The second pass escapes each line, converts `>` depth into nested `<blockquote>`s, opens a `<details>` fold at the quote start and wraps everything after the `-- ` delimiter in a dimmed signature span. It is a static public method so the test suite can check it directly.",
+          "tourOrder": 11
+        },
+        {
+          "title": "Folding HTML quotes",
+          "lineRange": [
+            255,
+            301
+          ],
+          "explanation": "`_foldQuotes` recognizes quote containers from Gmail, Apple Mail, Yahoo and Outlook and wraps each (if it has meaningful text and is not already inside a fold) in a `<details class=\"lm-quote\">`. For Outlook's `divRplyFwdMsg`/`appendonsend`, the header sits before the quoted body, so everything from that node to the end of its parent is moved into the fold. The private `nextNode` extension fills a gap in the `html` package's DOM API.",
+          "tourOrder": 11
+        }
+      ]
+    },
+    "tool/screenshots_test.dart": {
+      "overview": "A widget-test file used as a developer tool: it renders the real app screens with sample mailboxes and a canned AI provider and saves PNGs into `screenshots/`, so documentation images can be regenerated without a mail account or Ollama. It also works as a high-level smoke test, since several tests assert on UI behavior. Step 15 lists it among the developer tools; it relies on AppState's `debugLoad` hook and on the AiProvider abstraction from Step 5.",
+      "sections": [
+        {
+          "title": "Header and imports",
+          "lineRange": [
+            1,
+            25
+          ],
+          "explanation": "The comments explain the purpose and run command (`flutter test tool/screenshots_test.dart`). The `ignore_for_file` silences warnings because the file calls `@visibleForTesting` members such as `debugLoad`. Living in `tool/` rather than `test/` keeps it out of the normal `flutter test` run, since it writes files and needs local font assets.",
+          "tourOrder": 15
+        },
+        {
+          "title": "CannedAi provider",
+          "lineRange": [
+            27,
+            46
+          ],
+          "explanation": "A fake `AiProvider` that returns fixed output: a quick-replies JSON when the system prompt asks for three suggestions and a JSON schema is given, otherwise a summary. It demonstrates the payoff of the provider abstraction: EmailAi runs unchanged on top of a fake. The detection by prompt substring is brittle; if the quick-reply prompt wording in EmailAi changes, the screenshot will quietly show a summary instead.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Sample messages and fonts",
+          "lineRange": [
+            48,
+            88
+          ],
+          "explanation": "`mail()` builds real MIME messages with enough_mail's `MessageBuilder` and re-parses them, so the UI sees the same objects it would get from IMAP; UIDs count down to give a stable order. `loadFonts` loads Roboto and Material Icons from the Flutter SDK cache, because widget tests otherwise render text as boxes; the Homebrew fallback path ties it to macOS when `FLUTTER_ROOT` is unset. `snap` captures the `RepaintBoundary` at 1.5x inside `runAsync`, which is needed because image encoding is real async work outside the fake test clock.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Sample app state",
+          "lineRange": [
+            90,
+            203
+          ],
+          "explanation": "`sampleState` mocks SharedPreferences, creates a real AppState and injects three accounts (Gmail, Microsoft and a side Gmail) with mailboxes, messages and precomputed triage via `debugLoad`, plus an EmailAi on top of CannedAi. `app()` wraps either the full `HearthmailApp` or a single page in a themed MaterialApp, inside the RepaintBoundary that `snap` captures. Note `now` is a top-level final, so relative dates are fixed when the file loads.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Screenshot tests",
+          "lineRange": [
+            205,
+            287
+          ],
+          "explanation": "Each `testWidgets` sets a window size, builds the state, drives the UI (tapping Summarize and Quick replies, right-clicking with `kSecondaryButton`, switching to dark mode) and saves a numbered PNG. The context-menu test also asserts that the menu items exist and that 'Add sender to VIPs' updates UserData, so it doubles as a behavior test. The dark-mode test clears the brightness override only at the end, so a failure before that line could leak dark mode into later tests.",
+          "tourOrder": 15
+        }
+      ]
+    },
+    "lib/ui/home_page.dart": {
+      "overview": "HomePage is the app shell shown after setup: a responsive layout with sidebar, message list and reading pane side by side on wide windows, and a single pane with a drawer on phones. It listens to AppState's toast and undone-send streams, binds Apple-Mail-style keyboard shortcuts and hosts the AI 'Catch me up' digest dialog. Step 10 introduces it as the frame that MessageView and the AI widgets live in.",
+      "sections": [
+        {
+          "title": "Imports and widget",
+          "lineRange": [
+            1,
+            29
+          ],
+          "explanation": "HomePage is a StatefulWidget because it owns a search FocusNode (shared with the list pane for Cmd+F), two stream subscriptions and the phone-only flag `_showingMessageOnPhone`. The doc comment states the key design choice: one code path serves desktop, tablet and phone by switching layout on width.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Toast and undo-send streams",
+          "lineRange": [
+            31,
+            58
+          ],
+          "explanation": "In `initState` the page subscribes to `AppState.toasts` to show SnackBars and to `undoneSends` to reopen a ComposePage with the cancelled or failed message. Using streams rather than callbacks keeps AppState free of BuildContext, and the `mounted` checks avoid touching a disposed widget. `context.read` (not `watch`) is correct here because initState must not register a rebuild dependency. Subscriptions and the FocusNode are released in `dispose`.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Navigation and Catch me up",
+          "lineRange": [
+            60,
+            94
+          ],
+          "explanation": "`_compose` and `_settings` push full-screen routes. `_catchUp` picks up to 30 unread inbox messages, falling back to the latest 20 when fewer than three are unread, and opens a dialog whose `AiStreamView` streams `EmailAi.digest` token by token inside an `AiCard` that labels the content as AI-generated. The `start` callback form lets the view start (and restart) the stream itself.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Keyboard shortcuts",
+          "lineRange": [
+            96,
+            119
+          ],
+          "explanation": "Shortcuts are a map from `SingleActivator` to callbacks, consumed by `CallbackShortcuts`; message actions are added with a collection-if spread only when a message is selected. They mirror Apple Mail (Cmd+R reply, Cmd+Shift+R reply all, Cmd+Backspace delete and so on). All use `meta: true`, so on Windows and Linux they need the Windows/Super key rather than Ctrl, a likely gap if desktop support beyond macOS matters.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Responsive layout and scaffold",
+          "lineRange": [
+            121,
+            178
+          ],
+          "explanation": "The app bar shows Catch me up only when AI is ready and the inbox is not empty, as a labelled button on wide screens and an icon on narrow ones. At 900 px or wider the body is a Row of fixed-width sidebar (240) and list (380) plus an expanded MessageView; on phones it toggles between the list and the message with a back callback, and the sidebar moves into a Drawer. `Focus(autofocus: true)` gives the shortcut tree keyboard focus on launch.",
+          "tourOrder": 10
+        }
+      ]
+    },
+    "test/features_test.dart": {
+      "overview": "The main unit-test suite for pure logic. It covers HTML sanitization and plain-text rendering in EmailDocument, offline language detection, the vector index and embedding prompt formats, MailService header helpers (unsubscribe, phishing hints, threading), .ics export and UserData contacts and blocking. None of it needs a network, mail server or Ollama, which is the testing strategy Step 15 describes.",
+      "sections": [
+        {
+          "title": "Imports and MIME helper",
+          "lineRange": [
+            1,
+            12
+          ],
+          "explanation": "`msg()` builds a real `MimeMessage` from header text with enough_mail's parser, so header helpers are tested against the same type they process in production, without a server.",
+          "tourOrder": 15
+        },
+        {
+          "title": "EmailDocument tests",
+          "lineRange": [
+            14,
+            62
+          ],
+          "explanation": "These tests pin down the security contract from Step 11: scripts, `onload`, `javascript:` links and remote images are gone, the tracking pixel is removed, the hero image is blocked but counted, `cid:` images are inlined and the CSP contains a nonce and a restrictive `img-src`. Further tests check that `allowRemote` relaxes the CSP, that Gmail quotes fold, that plain text gets links, nested quotes, a dimmed signature and correct HTML escaping. Exact string assertions like `\"img-src data: cid:;\"` are strict, so harmless reformatting of the CSP will also break them.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Language and vector tests",
+          "lineRange": [
+            64,
+            99
+          ],
+          "explanation": "`Languages.guess` is checked on English, German, French, Hindi and Japanese samples and must stay silent on very short text. The VectorIndex test verifies nearest-neighbor ordering with a minimum score and removal, and the embedding tests confirm that each embedding model gets the prompt prefix format it was trained with.",
+          "tourOrder": 15
+        },
+        {
+          "title": "MailService helper tests",
+          "lineRange": [
+            101,
+            127
+          ],
+          "explanation": "Covers parsing `List-Unsubscribe` (mailto and web, plus one-click), the phishing heuristic (a brand name or address in the display name that does not match the real domain is suspicious, genuine senders are not) and conversation grouping via Message-ID, In-Reply-To and References, including subject normalization across Re/AW/Fwd prefixes.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Calendar and contacts tests",
+          "lineRange": [
+            129,
+            152
+          ],
+          "explanation": "The .ics test checks the default one-hour end, comma escaping and all-day next-day ends. The UserData test confirms contact suggestions rank by weight, match on name too, hide no-reply addresses, and that domain blocks such as `@spam.biz` match case-insensitively.",
+          "tourOrder": 15
+        }
+      ]
+    },
+    "pubspec.yaml": {
+      "overview": "The Dart/Flutter package manifest: it names the app, pins the SDK and lists the dependencies that the rest of the tour builds on. Step 2 uses it to introduce the building blocks: enough_mail for IMAP/SMTP, http for Ollama and OAuth, flutter_secure_storage for secrets, webview_flutter for rendering mail and provider for state. Most of the file is unchanged `flutter create` boilerplate comments.",
+      "sections": [
+        {
+          "title": "Package identity and SDK",
+          "lineRange": [
+            1,
+            22
+          ],
+          "explanation": "`publish_to: 'none'` keeps this private app off pub.dev. `version: 1.0.0+1` is the user-facing version plus build number used by each platform. The description is still the template's 'A new Flutter project.', a small leftover worth updating. `sdk: ^3.14.0` requires Dart 3.14 or newer below 4.0, which the code relies on for features like records, patterns and null-aware collection elements (`?trailing`).",
+          "tourOrder": 2
+        },
+        {
+          "title": "Runtime dependencies",
+          "lineRange": [
+            24,
+            51
+          ],
+          "explanation": "Each package maps to a layer: `enough_mail` (IMAP/SMTP and MIME), `http` (Ollama and OAuth), `provider` (AppState), `shared_preferences` and `flutter_secure_storage` (settings vs Keychain secrets), `path_provider`, `html` and `markdown` (sanitizing, plain text and sending Markdown as HTML), `webview_flutter` and `flutter_widget_from_html_core` (main and fallback mail rendering), `url_launcher`, `intl`, `crypto` (PKCE hashing) and `file_selector` (attachments). `material_ui` supplies the Material widgets imported throughout the UI. Caret constraints allow compatible minor updates.",
+          "tourOrder": 2
+        },
+        {
+          "title": "Dev dependencies",
+          "lineRange": [
+            53,
+            62
+          ],
+          "explanation": "Only `flutter_test` and `flutter_lints` are needed, consistent with tests that use fakes and in-memory stores instead of mocking frameworks.",
+          "tourOrder": 2
+        },
+        {
+          "title": "Flutter section",
+          "lineRange": [
+            64,
+            104
+          ],
+          "explanation": "`uses-material-design: true` bundles the Material Icons font. Everything else is commented template guidance; the app ships no custom assets or fonts.",
+          "tourOrder": 2
+        }
+      ]
+    },
+    "lib/ui/email_web_view.dart": {
+      "overview": "EmailWebView displays the safe page produced by EmailDocument in the platform web engine (WebKit or Chromium) through webview_flutter, and opens any link the user clicks in the external browser instead of navigating inside the app. Where no web view exists (Windows, the web, tests) it falls back to the pure-Flutter HtmlWidget renderer. It is the second half of Step 11's safe rendering pipeline.",
+      "sections": [
+        {
+          "title": "Widget and platform support",
+          "lineRange": [
+            1,
+            26
+          ],
+          "explanation": "`supported` checks for macOS, iOS or Android and a registered `WebViewPlatform`; the `!kIsWeb` check comes first because `dart:io`'s `Platform` throws on the web. Checking `WebViewPlatform.instance` also makes widget tests fall back automatically, since no plugin is registered there.",
+          "tourOrder": 11
+        },
+        {
+          "title": "Controller and navigation policy",
+          "lineRange": [
+            28,
+            58
+          ],
+          "explanation": "JavaScript is enabled only so the nonce-tagged fit-to-width script can run; the email's own scripts are still blocked by the CSP set by EmailDocument. The navigation delegate allows only `about:` and `data:` loads (the initial HTML) and prevents everything else, launching main-frame link targets externally. Risk: any parsable scheme is handed to `launchUrl`, so links such as `file:` or custom app schemes in a malicious email would be passed to the OS; an allowlist of `http`, `https` and `mailto` would be tighter. Setting the background is wrapped in try/catch because some platforms do not implement it.",
+          "tourOrder": 11
+        },
+        {
+          "title": "Loading and updates",
+          "lineRange": [
+            60,
+            70
+          ],
+          "explanation": "`_load` remembers the last HTML string and skips reloads when it has not changed, so rebuilds of the parent do not flash the web view. `didUpdateWidget` reloads when a new message (or an allow-images variant) arrives. A changed `background` is not reapplied after init, which matters only if the theme changes while a message is open."
+        },
+        {
+          "title": "Build and fallback renderer",
+          "lineRange": [
+            72,
+            89
+          ],
+          "explanation": "With a controller the widget is simply `WebViewWidget`. Otherwise `HtmlWidget` renders the same HTML in a scroll view with text color chosen from the background's luminance and taps opening externally. The fallback does not execute scripts or enforce the CSP, but since EmailDocument already removed scripts and blocked remote images in the markup, it stays reasonably safe.",
+          "tourOrder": 11
+        }
+      ]
+    },
+    "lib/services/html_text.dart": {
+      "overview": "Two small HTML utilities used outside the reading pane. `htmlToText` turns an HTML email into readable plain text for AI prompts and list previews, and `blockRemoteImages` strips remote images from HTML. Step 6 lists it beside MailService because MailService uses it to extract AI-ready body text; Step 11 groups it with the HTML safety code.",
+      "sections": [
+        {
+          "title": "Block tag set",
+          "lineRange": [
+            1,
+            7
+          ],
+          "explanation": "The set of tags after which a newline is written, so paragraphs, list items, table rows and headings keep their visual separation in the text output.",
+          "tourOrder": 6
+        },
+        {
+          "title": "htmlToText",
+          "lineRange": [
+            9,
+            49
+          ],
+          "explanation": "Parses with the `html` package, removes non-content elements (scripts, styles, head, title, noscript) and walks the DOM recursively, collapsing whitespace in text nodes, prefixing list items with `- ` and appending link targets in parentheses when they are http links not already visible and shorter than 120 characters, which gives the AI useful context without long tracking URLs. A final pass trims lines and limits blank lines to one. The fallback `doc.body ?? doc.documentElement ?? doc` handles fragments without a body.",
+          "tourOrder": 6
+        },
+        {
+          "title": "blockRemoteImages",
+          "lineRange": [
+            51,
+            63
+          ],
+          "explanation": "Removes `<img>` elements whose `src` starts with `http` and returns the original string untouched if nothing was removed, avoiding a needless re-serialization. It is simpler than EmailDocument's handling: protocol-relative `//` URLs, `srcset`, CSS backgrounds and `<picture>` sources are not covered, so it should not be relied on as the primary anti-tracking defense; the CSP in EmailDocument does that job for displayed mail.",
+          "tourOrder": 11
+        }
+      ]
+    },
+    "macos/Runner/DebugProfile.entitlements": {
+      "overview": "The App Sandbox entitlements for macOS Debug and Profile builds. Each key maps to a feature from earlier steps: outgoing network for IMAP/SMTP, OAuth and Ollama; an incoming network listener for the OAuth loopback redirect; and file access for attachments. Step 14 notes that the Release file is the same minus `allow-jit`.",
+      "sections": [
+        {
+          "title": "Sandbox and network",
+          "lineRange": [
+            1,
+            12
+          ],
+          "explanation": "`app-sandbox` confines the app; `network.client` permits outgoing connections to mail servers, OAuth endpoints and the local Ollama server; `network.server` allows listening on a localhost port, which the OAuth loopback redirect needs. `cs.allow-jit` is required only in debug and profile builds because the Dart VM JIT-compiles code there for hot reload; release builds are AOT-compiled and drop it.",
+          "tourOrder": 14
+        },
+        {
+          "title": "File access",
+          "lineRange": [
+            13,
+            18
+          ],
+          "explanation": "`files.user-selected.read-write` lets the app read files the user picks in the open panel (attachments) and write where they choose to save; `files.downloads.read-write` allows saving attachments directly into Downloads. These are the narrowest file entitlements that fit the features, consistent with the privacy-first design.",
+          "tourOrder": 14
+        }
+      ]
+    },
+    "macos/Runner/Configs/AppInfo.xcconfig": {
+      "overview": "Xcode build settings that give the macOS app its identity: product name, bundle identifier and copyright, plus an optional include of a local signing config. Step 14 groups it with the entitlements and signing example as the platform configuration layer.",
+      "sections": [
+        {
+          "title": "App identity",
+          "lineRange": [
+            1,
+            14
+          ],
+          "explanation": "`PRODUCT_NAME` sets the app and window title, `PRODUCT_BUNDLE_IDENTIFIER` (`app.hearthmail.hearthmail`) is how macOS identifies the app for the sandbox container and Keychain access, and the copyright appears in About. Changing the bundle ID would make existing Keychain items and sandbox data unreachable for the new identity.",
+          "tourOrder": 14
+        },
+        {
+          "title": "Optional signing include",
+          "lineRange": [
+            16,
+            16
+          ],
+          "explanation": "`#include?` with a question mark is an optional include: if `Signing.xcconfig` is absent (the default for a fresh checkout) the build still succeeds and is signed ad hoc. This lets each developer keep their own team ID in an untracked file.",
+          "tourOrder": 14
+        }
+      ]
+    },
+    "macos/Runner/Configs/Signing.xcconfig.example": {
+      "overview": "A template for the developer's local `Signing.xcconfig`, which AppInfo.xcconfig optionally includes. Signing with a stable Apple Development identity matters for Hearthmail because credentials live in the Keychain: with ad hoc signing, macOS sees each rebuild as a different app and asks for Keychain access again.",
+      "sections": [
+        {
+          "title": "Signing settings",
+          "lineRange": [
+            1,
+            6
+          ],
+          "explanation": "The comments explain the workflow: copy to `Signing.xcconfig`, insert your team ID from Xcode. `DEVELOPMENT_TEAM` and `CODE_SIGN_IDENTITY = Apple Development` give every local build the same signature, so Keychain access granted once stays granted. Keeping the real file out of version control avoids committing personal team IDs.",
+          "tourOrder": 14
+        }
+      ]
+    },
+    "lib/ui/message_view.dart": {
+      "overview": "The reading pane: everything shown once an email is selected. It has the toolbar (reply, archive, flag, remind me, a More menu), the header with sender, recipients and status banners, the AI action bar (summarize, quick replies, add to calendar, translate, reply with AI), attachment chips and the sandboxed HTML body. It also exports helpers that other screens use: `openReply`, `openForward`, `snoozeChoices`, `pickDateTime` and the right-click `showMessageMenu` that `message_list.dart` imports. It is the main file of the 'App Shell and Reading Pane' tour step. Most actions are delegated to `AppState`, so this file stays mostly presentation and short-lived UI state.",
+      "sections": [
+        {
+          "title": "Imports and compose helpers",
+          "lineRange": [
+            1,
+            34
+          ],
+          "explanation": "Imports the enough_mail model, the AI service, the HTML pipeline (`email_html.dart`, `email_web_view.dart`) and `AppState`. `openReply` and `openForward` are top-level functions, not methods, so the toolbar, the context menu, the AI bar and the quick-reply buttons all open `ComposePage` the same way. The optional `aiInstruction` is how an AI draft request goes to the composer: this file only passes the instruction, and the composer does the generation.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Snooze times and date picker",
+          "lineRange": [
+            36,
+            65
+          ],
+          "explanation": "`snoozeChoices` builds the Apple Mail and Gmail style 'Remind me' presets as `(label, DateTime)` records. The optional `from` argument makes it testable with a fixed clock. The modulo arithmetic finds the *next* Saturday and Monday; when today is already that day it adds 7 days instead of returning today. 'This evening' only appears before 17:00 and 'This weekend' only Monday to Thursday. `pickDateTime` chains a date picker and a time picker. It checks `context.mounted` between the two awaits, which is the usual guard against using a disposed context after an async gap.",
+          "tourOrder": 10
+        },
+        {
+          "title": "MessageView: empty state and keying",
+          "lineRange": [
+            67,
+            97
+          ],
+          "explanation": "The top-level pane watches `AppState` and shows a placeholder when nothing is selected. The important detail is `_MessageBody(key: ObjectKey(m))`. Because the key is the message object, selecting another email creates a fresh `State`. Translation, summaries, quick replies and the parsed-document cache are then reset instead of leaking from the previous email. The other half of that design: an in-place update that replaces the `MimeMessage` instance (a reload, for example) also discards that UI state.",
+          "tourOrder": 10
+        },
+        {
+          "title": "MessageToolbar actions",
+          "lineRange": [
+            99,
+            241
+          ],
+          "explanation": "The toolbar uses `context.read` (not `watch`), because the parent `MessageView` already rebuilds on state changes. Under 700 px wide (`narrow`) it moves Reply all and Forward into the More menu. Local closures (`snoozeMenu`, `moveMenu`, `confirmBlock`) keep the dialog logic next to the buttons. The `Builder` around the alarm button gets a `BuildContext` for that button, so the snooze menu opens under it. The tooltips list Apple Mail shortcuts (\u2318R, \u2318E, \u21e7\u2318L), but the shortcuts are bound elsewhere. Note: the move and block dialogs are repeated almost line for line in `showMessageMenu` below, so a fix to one must be copied to the other.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Body state, language detection, translation",
+          "lineRange": [
+            243,
+            318
+          ],
+          "explanation": "`_MessageBodyState` keeps the short-lived per-email UI state: summary/quick-reply toggles, remote-image opt-in, translation progress and busy flags. `initState` starts `_detectLanguage`, which asks the local AI for the email's language. The translate banner only appears when that language differs from the user's `myLanguage` setting. `_translate` streams chunks from `ai.translate` into a `StringBuffer` and keeps the `StreamSubscription` so `dispose` can cancel it. Every `setState` is guarded by `mounted`, which matters because the user can switch emails while a stream is still running.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Calendar, unsubscribe and document cache",
+          "lineRange": [
+            320,
+            410
+          ],
+          "explanation": "`_addToCalendar` asks the AI to extract an event and then shows a confirmation dialog that says the details were 'Found by AI'. Calendar opens for a final check, so a model error does not silently create a wrong event. `_unsubscribe` confirms first and sends the result text (or a `friendlyError`) to a toast. `_document` caches the parsed `EmailDocument` under a string key made of image permission, theme, translation state and translated length, so HTML is not re-parsed on every rebuild. During streaming translation the length changes with every chunk, so the plain document is rebuilt once per chunk, which is intended. `_inline` resolves `cid:` images to base64 `data:` URIs, which can use a lot of memory for large inline images.",
+          "tourOrder": 11
+        },
+        {
+          "title": "Header and status banners",
+          "lineRange": [
+            412,
+            550
+          ],
+          "explanation": "`build` collects everything the header needs: suspicion (forged-sender check from `MailService.suspicionOf` first, then the AI triage flag), unsubscribe info, snooze, VIP status and attachments. A local `banner` helper draws the stacked notices (phishing warning, reminder, translation, mailing list, blocked remote images). The 'Load images' banner only appears when the HTML document reports `blockedImages > 0`, so plain emails never show it. Risks: `isHtml` decodes the HTML part again on every build, which partly undoes the cache. `MailService.senderName(m).characters.first` throws a `StateError` if the sender name is an empty string.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Body layout and AI bar",
+          "lineRange": [
+            552,
+            660
+          ],
+          "explanation": "The `LayoutBuilder` limits the scrollable header to 55% of the pane height, so the email body always gets space. The body container stays white for HTML even in dark mode (as the comment explains, HTML email is designed for a white page) and only follows the theme for plain text. `_aiBar` creates the quick-replies `Future` once and stores it in state, so `FutureBuilder` does not restart the request on every rebuild. The 'Reply with AI' field passes the typed text to `openReply`. The suffix button does this even when the field is empty. Clicking a quick reply opens the composer with that short reply as the AI instruction.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Attachment chips",
+          "lineRange": [
+            662,
+            709
+          ],
+          "explanation": "Each attachment is an `InputChip` with two actions: tap opens the file, and the 'delete' icon, reused as a download button, saves it to Downloads. Both call `AppState.saveAttachment`. A local `_busy` flag disables the chip and shows a spinner while it runs. Errors go through `AppState.friendlyError`, so the toast text stays readable. `_size` formats bytes as B, KB or MB.",
+          "tourOrder": 10
+        },
+        {
+          "title": "Right-click message menu",
+          "lineRange": [
+            711,
+            824
+          ],
+          "explanation": "`showMessageMenu` is the Apple Mail style context menu used by the message list (right-click on desktop, long-press on phones). The menu is placed with `RelativeRect.fromRect` against the overlay's size, so it opens at the pointer. After the menu returns it checks `context.mounted`, then switches on the chosen action; the 'remind' and 'move' cases open more dialogs. `sender!` is safe here because those items are only added when `sender != null`. The `EventFinder` typedef above is not used in this file; its comment says it is for the event dialog and tests.",
+          "tourOrder": 10
+        }
+      ]
+    },
+    "lib/ui/message_list.dart": {
+      "overview": "The middle column of the app: the search bar, a title row for the current view, filter chips, and the scrolling message list with paging, swipe gestures and context menus. It also has the special lists for Scheduled and Follow-up views and the `MessageTile` row widget with its triage tags. It is where the 'Search: Keyword, AI and Semantic' tour step shows up in the UI: the search bar chooses between AI and keyword search, and `_SearchHeader` can stream an AI answer drawn from the top results. All data and actions come from `AppState` through Provider.",
+      "sections": [
+        {
+          "title": "Imports and relative dates",
+          "lineRange": [
+            1,
+            25
+          ],
+          "explanation": "The file imports `material_ui` rather than `package:flutter/material.dart`, presumably the project's Material re-export. It imports only `showMessageMenu` from `message_view.dart`, which keeps the coupling between the two panes small. `formatListDate` follows the usual mail-client pattern: time for today, weekday for the last 6 days, month and day for this year, and the full date for older mail. It always converts to local time first.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Pane header, title and filters",
+          "lineRange": [
+            27,
+            107
+          ],
+          "explanation": "`MessageListPane` watches `AppState` and uses an exhaustive Dart 3 `switch` expression over `ViewKind` to pick the title. Adding a new view kind will fail to compile until it gets a title, which is useful. The 'Mark all as read' button only appears when some message is unread. The filter chips (All/Unread/Flagged/Attachments) are hidden for Search, Scheduled and Follow-up views, where they make no sense. The body chooses between the two special lists and the normal message list.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Loading, error and empty states",
+          "lineRange": [
+            109,
+            148
+          ],
+          "explanation": "`_buildList` handles the non-happy paths in priority order. It shows a spinner while connecting with nothing to show yet, and a per-account error panel with a single 'Try again' button when *no* account is connected and some have failed. Then it shows a context-specific empty message (for example 'Sorting your inbox\u2026' while AI triage runs for smart views). A partly failed setup, where one account works and another fails, still shows the list. The failure only becomes a full-screen error when nothing is connected.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Paged list with swipe and menus",
+          "lineRange": [
+            149,
+            214
+          ],
+          "explanation": "Infinite scroll uses a `NotificationListener` that calls `state.loadMore()` within 400 px of the end, plus a spinner row at the end. This handler fires on every scroll notification, so `AppState.loadMore` must ignore repeated calls while a page is loading. Each row is wrapped in a `GestureDetector` for right-click and long-press menus. Below 700 px it is also wrapped in a `Dismissible` (right swipe archives, left swipe deletes). The `Dismissible` uses `ObjectKey(m)`, so the identity of the `MimeMessage` instance matters. The 'suspicious' tag combines the header-based forgery check with the AI triage flag.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Search bar with AI toggle",
+          "lineRange": [
+            216,
+            280
+          ],
+          "explanation": "A stateful search field with a switch that chooses between AI search and plain keyword search. The switch is disabled when `state.aiReady` is false, and the effective value is `_useAi && state.aiReady`. Submitting calls `state.search(q, useAi: ai)`. The hint text changes to 'Ask anything\u2026' in AI mode. A detail to notice: `build` clears the controller as a side effect when the app leaves search mode and the field is not focused. It works, but changing state during build can be surprising.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Search status and AI answer",
+          "lineRange": [
+            282,
+            342
+          ],
+          "explanation": "`_SearchHeader` shows the search progress text. After an AI search finishes, it decides once per query (tracked in `_answeredFor`) whether the query looks like a question: it ends with '?' or starts with an interrogative matched by a regex. If so, it opens an 'Answer' card automatically. Otherwise an 'Ask AI' button lets the user request one. The answer streams from `ai.answerFromEmails` over the top 6 results. `ValueKey('answer:$q')` restarts the stream when the query changes.",
+          "tourOrder": 9
+        },
+        {
+          "title": "MessageTile row and tags",
+          "lineRange": [
+            344,
+            477
+          ],
+          "explanation": "`MessageTile` draws one row: an unread dot, a VIP star, the sender (bold when unread), flag and attachment icons, the date, the subject and a 2-line preview with whitespace collapsed. The tag row is only built when at least one tag applies. Tags include reminder, Suspicious, Priority, Needs reply (hidden once the message `isAnswered`), category (using `categoryColor` from the sidebar) and the account badge, added with Dart's null-aware element `?account`. `MailService.bodyText` runs on every build of every visible tile, which could be slow for large messages.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Scheduled sends list",
+          "lineRange": [
+            480,
+            516
+          ],
+          "explanation": "The Scheduled view lists messages queued by this app's 'send later' feature (stored in `userData.scheduled`, so it is local to this computer, as FEATURES.md notes). Each row shows recipient, send time and sending account, with 'Send now' and 'Cancel' buttons that call `AppState`. The empty state tells the user where the feature is found in the composer.",
+          "tourOrder": 12
+        },
+        {
+          "title": "Follow-up reminders list",
+          "lineRange": [
+            518,
+            563
+          ],
+          "explanation": "The Follow-up view splits reminders into *due* (no reply yet, highlighted) and *waiting*, sorted by due date under a 'WAITING' label. A due item gets a 'Follow up' button that opens `ComposePage(followUpOf: f)`. Every item can be dismissed. The local `tile` closure avoids a separate widget class for this small list.",
+          "tourOrder": 13
+        }
+      ]
+    },
+    "tool/model_bench.dart": {
+      "overview": "A command-line benchmark (`dart run tool/model_bench.dart embed|chat|translate`) that compares local Ollama models on the app's real jobs: semantic search retrieval, triage sorting accuracy and writing speed, and translation quality. Its results are the numbers quoted in FEATURES.md's 'Local AI: which model does what' table (for example 40/40 top-1 retrieval for embeddinggemma), which back the default model choices. It talks directly to Ollama's HTTP API and does not import any app code, so its prompts and JSON schema copy the app's instead of sharing them. It belongs to the 'Tests and Model Benchmarks' tour step.",
+      "sections": [
+        {
+          "title": "Usage header and constants",
+          "lineRange": [
+            1,
+            15
+          ],
+          "explanation": "The header comment documents the three modes and the requirement that Ollama is running. `avoid_print` is turned off for the file because console output is the whole point. `base` hard-codes Ollama's default `localhost:11434` endpoint.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Synthetic email corpus",
+          "lineRange": [
+            17,
+            72
+          ],
+          "explanation": "Fifty `(subject, body)` records written to resemble a real student/worker inbox in Berlin: flights, invoices, course deadlines, German and French mail. From index 30 there are deliberate look-alike distractors (another Lisbon flight email, another invoice, another thesis email). Their job is to make retrieval hard enough to separate the models.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Retrieval queries",
+          "lineRange": [
+            75,
+            118
+          ],
+          "explanation": "Forty `(query, expected email index)` pairs. The first 20 are direct, and the second 20 are paraphrases, cross-language queries ('Mieterh\u00f6hung', 'Hautarzt Termin') and short name-based queries ('Max Sony'). The ground truth is a single correct index per query, so the metrics below measure exact-document retrieval.",
+          "tourOrder": 15
+        },
+        {
+          "title": "HTTP and vector helpers",
+          "lineRange": [
+            121,
+            147
+          ],
+          "explanation": "`post` wraps Ollama JSON calls and throws on any non-200 response. `norm` truncates a vector to `dims` and L2-normalizes it, so dot product equals cosine similarity. This also lets the benchmark test Matryoshka-style truncated embeddings. `embed` calls `/api/embed` with a batch of inputs and `keep_alive` so the model stays loaded between calls.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Embedding benchmark",
+          "lineRange": [
+            149,
+            193
+          ],
+          "explanation": "Each model gets its own query/document prompt templates (embeddinggemma's `task: search result | query:` format, and qwen3-embedding's instruction prefix), which affect retrieval quality. After a warm-up call it times batch document embedding and per-query embedding. It then ranks all documents for each query at the full size, 512 and 256 dimensions, and reports top-1, top-3 and MRR. The 512-dimension result explains the app's 512-number vectors described in FEATURES.md.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Chat speed and sorting accuracy",
+          "lineRange": [
+            195,
+            280
+          ],
+          "explanation": "`labels` gives expected category and priority for 20 emails. `benchChat` first measures writing speed with Ollama's own `eval_count`/`eval_duration` counters (tokens per second) on a reply-to-Priya task. It then sorts in batches of 10, 'like the app', using a JSON-schema `format` with enum-constrained category and priority, plus a system prompt that defines 'high' priority. Out-of-range indexes are skipped, and parse failures are silently ignored by the empty `catch`, so a model that returns malformed JSON simply scores lower.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Translation comparison",
+          "lineRange": [
+            282,
+            320
+          ],
+          "explanation": "Five samples (German, French, Hindi, Japanese, English) are translated into English, or into German for the English sample. translategemma models get their documented single-user-turn prompt template; other models get a generic translator system prompt. Output is printed for a person to judge; there is no automatic score. This is how FEATURES.md concludes that translategemma is most faithful for reading mail.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Entry point",
+          "lineRange": [
+            322,
+            333
+          ],
+          "explanation": "`main` picks the mode (default `embed`) and accepts optional model names after it. Default model lists match those in FEATURES.md. An unknown mode does nothing and still exits 0. `exit(0)` forces the process to end even if HTTP connections are still open.",
+          "tourOrder": 15
+        }
+      ]
+    },
+    "lib/services/oauth.dart": {
+      "overview": "Implements 'Sign in with Google / Microsoft' for IMAP/SMTP using OAuth 2.0 authorization-code flow with PKCE and a temporary loopback HTTP server as redirect target. Users register their own OAuth app (see OAUTH_SETUP.md), so `OAuthClient` takes the client ID (and Google's optional secret) as input instead of hard-coding them. It returns an enough_mail `OauthToken` plus the email and name read from the ID token, and can refresh access tokens later. It is the core of the 'Sign-In: OAuth and Keychain' tour step; `settings_store.dart` persists what it returns.",
+      "sections": [
+        {
+          "title": "Imports and design note",
+          "lineRange": [
+            1,
+            18
+          ],
+          "explanation": "It uses `dart:io` `HttpServer` for the loopback redirect, `crypto` for the PKCE SHA-256 challenge, `http` for token calls and `url_launcher` to open the system browser. The doc comment summarizes the flow: the browser signs in and sends a one-time code to a server on 127.0.0.1 that runs for a few minutes.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Constructors and injectable deps",
+          "lineRange": [
+            19,
+            39
+          ],
+          "explanation": "Two named constructors set the provider `kind`. Google normalizes an empty or whitespace-only secret to `null`, and Microsoft never has one (it is a public client). `http.Client` and `openBrowser` are optional injections. Production uses the global `http` functions and `launchUrl`; tests pass a `MockClient` and a fake browser. This keeps the class testable without a real browser or network.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Provider endpoints, scopes, servers",
+          "lineRange": [
+            41,
+            63
+          ],
+          "explanation": "Per-provider endpoints and scopes are getters that switch on `_google`. Google uses the full `https://mail.google.com/` scope (required for IMAP/SMTP XOAUTH2). Microsoft asks for the Outlook IMAP and SMTP delegated scopes plus `offline_access` for a refresh token. `servers` returns a Dart record with the matching IMAP/SMTP hosts and ports (Gmail SMTP over SSL 465, Office 365 STARTTLS 587), so account setup can fill these in automatically.",
+          "tourOrder": 7
+        },
+        {
+          "title": "PKCE values and loopback servers",
+          "lineRange": [
+            65,
+            80
+          ],
+          "explanation": "`signIn` creates a 64-character PKCE verifier and its S256 challenge (base64url without padding), plus a random `state` against CSRF. It binds IPv4 loopback on port 0 (the OS picks a free port) and tries the same port on IPv6, since 'localhost' can resolve to `::1` in the browser. Any IPv6 failure is ignored. The redirect URI differs by provider: Google wants the `127.0.0.1` literal, and Microsoft registrations use `localhost`, as the comment notes.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Redirect request handler",
+          "lineRange": [
+            81,
+            98
+          ],
+          "explanation": "A `Completer` connects the HTTP callback to the waiting `signIn`. Requests without `code` or `error` (such as a favicon fetch) get a 404 and are ignored. Otherwise it serves a small 'you can close this tab' page and completes with the query parameters. The first matching request wins, and the state is checked afterwards. So a stray local request with a wrong `state` ends the sign-in with an error rather than being skipped. That is safe, but any local process can make the attempt fail.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Authorization URL and waiting",
+          "lineRange": [
+            99,
+            124
+          ],
+          "explanation": "It builds the authorization URL with collection-if/spread (Google: `access_type=offline`, `prompt=consent` to make sure a refresh token comes back; Microsoft: `select_account`). `'login_hint': ?loginHint` uses Dart's newer null-aware map entry syntax, which leaves the key out when the value is null. It opens the browser, waits up to 5 minutes, maps provider errors to friendly text, and rejects a `state` mismatch.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Code exchange and identity",
+          "lineRange": [
+            126,
+            150
+          ],
+          "explanation": "Exchanges the code with the PKCE `code_verifier` (and the secret only if one exists). Microsoft also repeats `scope`. It refuses to continue without a refresh token, because the user would otherwise be signed out within an hour. The email comes from unverified ID-token claims (`email`, then `preferred_username`, then the login hint). That is acceptable here because the token came straight from the token endpoint over TLS. The `finally` block always cancels subscriptions and force-closes both servers, so ports are not left open after a failure or timeout.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Token refresh and POST helper",
+          "lineRange": [
+            152,
+            179
+          ],
+          "explanation": "`refresh` sends a `refresh_token` grant. `_token`'s `fallbackRefresh` keeps the old refresh token when the provider does not rotate it (Google usually does not). `_post` applies a 30 s timeout and turns `SocketException` into 'No internet connection.' Risk: `jsonDecode(res.body)` runs before the status check, so a non-JSON error page (a proxy or captive portal, for example) throws a `FormatException` instead of an `OAuthException`. A `TimeoutException` is also not wrapped.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Parsing, error mapping, randomness",
+          "lineRange": [
+            181,
+            222
+          ],
+          "explanation": "`_token` builds the enough_mail `OauthToken` with sensible defaults (3600 s, Bearer) and records `provider: kind.name`, which tells the app later which client should refresh it. `_idClaims` base64url-decodes the JWT payload without verifying the signature and returns `{}` on any problem. `_describeError` maps common failures, including Azure AD codes (AADSTS65001 admin consent, AADSTS700016 unknown app) and Google's `org_internal`, to advice for university users. `_randomString` uses `Random.secure()` over the RFC 7636 unreserved character set.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Result and exception types",
+          "lineRange": [
+            225,
+            237
+          ],
+          "explanation": "`OAuthResult` bundles the token with the email and display name for account creation. `OAuthException.toString()` returns only the message, so the UI can show it directly to the user.",
+          "tourOrder": 7
+        }
+      ]
+    },
+    "lib/services/settings_store.dart": {
+      "overview": "Defines `AppSettings`, the immutable app-wide preferences (Ollama URL and model choices, writing profile, privacy and search options, the user's own OAuth client IDs), and `SettingsStore`, which saves settings and account configs as JSON in SharedPreferences and keeps passwords and OAuth tokens in the OS keychain through flutter_secure_storage. It is the 'Keychain' half of the 'Sign-In: OAuth and Keychain' tour step and the storage behind the Settings page (tour step 13).",
+      "sections": [
+        {
+          "title": "AppSettings fields and defaults",
+          "lineRange": [
+            1,
+            61
+          ],
+          "explanation": "An immutable value class whose constructor defaults are the out-of-the-box configuration: local Ollama at `localhost:11434`, empty model names (meaning 'pick automatically'), auto-sort on, remote images *off* for privacy, semantic search on, 10 s undo-send, 3,000-email index depth. The comments separate `fastModel` (structured jobs) from `writingModel` (text you send), the split FEATURES.md justifies with benchmarks.",
+          "tourOrder": 7
+        },
+        {
+          "title": "copyWith",
+          "lineRange": [
+            63,
+            98
+          ],
+          "explanation": "The standard immutable-update pattern: every field is optional and falls back to the current value. One limitation of `??`: a field cannot be set back to `null` this way. That is not a problem here because every field is non-nullable.",
+          "tourOrder": 13
+        },
+        {
+          "title": "JSON serialization",
+          "lineRange": [
+            100,
+            137
+          ],
+          "explanation": "`toJson`/`fromJson` map fields one to one. Every read in `fromJson` has its own default, so a settings blob from an older version with missing keys still loads. Risk: the casts are strict (`as int?`, `as bool?`). A value of the wrong type throws, and `loadSettings` catches that by resetting *all* settings to defaults rather than only the bad field. Note also that `googleClientSecret` is written here into plain SharedPreferences, not the keychain. OAUTH_SETUP.md says that secret is not truly secret for desktop apps.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Store setup and keychain options",
+          "lineRange": [
+            139,
+            155
+          ],
+          "explanation": "`SettingsStore` has a private constructor and an async `open()` factory, because `SharedPreferences.getInstance()` is async. The secure storage is configured with `usesDataProtectionKeychain: false`. The comment explains why: the classic login keychain works for unsigned local macOS builds, while the data-protection keychain needs a paid developer signature. Keys carry a `.v1` suffix, which leaves room for future format migrations.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Settings and accounts persistence",
+          "lineRange": [
+            157,
+            184
+          ],
+          "explanation": "Loading is defensive: a missing or corrupt blob gives defaults or an empty account list instead of crashing at startup. The account configs themselves (servers, auth type, and so on) are stored as JSON in preferences. Only secrets go to the keychain.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Passwords and OAuth tokens",
+          "lineRange": [
+            186,
+            207
+          ],
+          "explanation": "Secrets are stored per account under `password.<id>` and `oauth.<id>`. `deletePassword` removes *both* keys, so removing an account also deletes its OAuth token, as promised in OAUTH_SETUP.md's privacy section. `readToken` returns `null` on a corrupt token, which the app should treat as 'sign in again'.",
+          "tourOrder": 7
+        }
+      ]
+    },
+    "test/oauth_test.dart": {
+      "overview": "Unit tests for `OAuthClient` that run the real loopback-server flow without a network. A fake browser reads the authorization URL and makes a real HTTP request back to the app's local server, and `MockClient` stands in for the token endpoint. The tests cover PKCE correctness, provider-specific parameters, CSRF state checking, error mapping and refresh-token retention. They belong to the 'Tests and Model Benchmarks' tour step and are the clearest executable description of how `oauth.dart` is meant to behave.",
+      "sections": [
+        {
+          "title": "Imports and fake JWT",
+          "lineRange": [
+            1,
+            12
+          ],
+          "explanation": "`_jwt` builds a token shaped like `x.<payload>.sig` with a base64url-encoded, unpadded claims payload. That is enough for the client, because `_idClaims` only decodes the middle part and never checks the signature.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Fake browser",
+          "lineRange": [
+            14,
+            40
+          ],
+          "explanation": "`fakeBrowser` plays the browser and the provider. It hands the auth URL to an `inspect` callback, then requests the `redirect_uri` with `code` (or `error`) and the original or tampered `state`. The request runs fire-and-forget, so the app cannot assume the callback arrives after `openBrowser` returns. Because it always rewrites the host to `127.0.0.1`, the IPv6 `localhost` listener in `oauth.dart` is not covered by these tests.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Google happy path",
+          "lineRange": [
+            43,
+            89
+          ],
+          "explanation": "Checks the authorization URL (host, client ID, mail scope, `access_type=offline`, S256, 127.0.0.1 redirect, login hint). The key PKCE check hashes the `code_verifier` sent to the token endpoint and compares it to the `code_challenge` in the browser URL. It also checks that the secret and the same redirect URI were sent, and that email, name and tokens were read back.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Microsoft differences",
+          "lineRange": [
+            91,
+            122
+          ],
+          "explanation": "Checks the Microsoft-specific behavior: a `localhost` redirect, IMAP/SMTP/`offline_access` scopes, *no* `client_secret` in the token request, email taken from `preferred_username`, and Office 365 SMTP port 587.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Failure paths",
+          "lineRange": [
+            124,
+            143
+          ],
+          "explanation": "The first test tampers with `state` and expects an `OAuthException` (the CSRF protection). The second sends `error=access_denied` and checks the friendly 'cancelled or not allowed' message. Its name says 'admin-consent errors from universities', but it actually tests the access-denied branch. The AADSTS admin-consent mapping in `_describeError` is not tested.",
+          "tourOrder": 15
+        },
+        {
+          "title": "Refresh keeps the old token",
+          "lineRange": [
+            145,
+            158
+          ],
+          "explanation": "Checks that `refresh` sends a `refresh_token` grant and, when the provider response has no new refresh token, keeps the old one (`fallbackRefresh`). Without that, the stored token would lose its refresh token and the user would be signed out.",
+          "tourOrder": 15
+        }
+      ]
+    },
+    "OAUTH_SETUP.md": {
+      "overview": "A user guide for registering your own free Google and Microsoft OAuth apps so Hearthmail can sign in without passwords. It explains which method suits which kind of account and gives step-by-step console instructions, including common university problems. Its settings must match the code in `lib/services/oauth.dart` (scopes, redirect URIs, public client without a secret for Microsoft). It is the documentation part of the 'Sign-In: OAuth and Keychain' tour step.",
+      "sections": [
+        {
+          "title": "Why and which method",
+          "lineRange": [
+            1,
+            17
+          ],
+          "explanation": "Explains the main constraint: there is no company behind Hearthmail to register a shared OAuth app, so each user registers their own once per provider. The table recommends app passwords for personal Gmail, iCloud, Yahoo and Fastmail, and OAuth for university Google/Microsoft 365 and Outlook.com accounts, where app passwords are often unavailable.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Google registration",
+          "lineRange": [
+            19,
+            51
+          ],
+          "explanation": "Steps to create a project, enable the Gmail API, configure an External consent screen with test users, and create a **Desktop app** client ID and secret. The Desktop-app client type is what allows the loopback `127.0.0.1` redirect used in `oauth.dart`. The notes cover the 'unverified app' warning, weekly re-sign-in in Testing mode (avoided by Publishing), and university admin blocks, which map to the `org_internal` error text in code.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Microsoft registration",
+          "lineRange": [
+            53,
+            82
+          ],
+          "explanation": "Steps to register a multi-tenant app with a **Public client** redirect of `http://localhost` (matching the code's Microsoft redirect), add the `IMAP.AccessAsUser.All` and `SMTP.Send` delegated permissions, and allow public client flows, so no secret is needed. The notes explain 'Need admin approval' (the AADSTS65001 mapping in `_describeError`) and universities that disable IMAP or SMTP AUTH, which no client can work around.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Privacy",
+          "lineRange": [
+            84,
+            93
+          ],
+          "explanation": "States that the password is never seen by the app, tokens are stored in the Keychain and refreshed automatically, and removing an account deletes its key (`SettingsStore.deletePassword` removes the `oauth.<id>` entry). It links to the providers' revocation pages. Note: the Google client *secret* entered in settings is stored in preferences rather than the Keychain. This document treats that secret as not truly secret.",
+          "tourOrder": 7
+        }
+      ]
+    },
+    "FEATURES.md": {
+      "overview": "A feature matrix comparing Hearthmail with Apple Mail and Gmail, using status markers for built, possible, limited and impossible. It also records which local Ollama model handles which job, based on `tool/model_bench.dart`. It is the project's statement of scope and the best place to learn *why* some features are missing (most are limits of IMAP or of running without a server). It goes with the README in the 'Project Overview' tour step.",
+      "sections": [
+        {
+          "title": "Title and legend",
+          "lineRange": [
+            1,
+            3
+          ],
+          "explanation": "Dated status snapshot (17 Nov 2026) with a four-symbol legend. The \u26a0\ufe0f 'possible with limits' category usually means 'works only while this app is running on this computer'.",
+          "tourOrder": 1
+        },
+        {
+          "title": "Reading and organizing",
+          "lineRange": [
+            5,
+            39
+          ],
+          "explanation": "Lists reading features and where each idea comes from. Most AI features (categories, priority, needs-reply, phishing warning) run on the local model; see `lib/models/triage.dart`. Snooze is \u26a0\ufe0f because it is stored locally, and other devices still show the email. Server-side rules and closed-app notifications are \u274c because Hearthmail has no backend and Gmail filters cannot be reached over IMAP. Thread view is \ud83d\udd1c although thread detection already exists for Mute.",
+          "tourOrder": 1
+        },
+        {
+          "title": "Writing and sending",
+          "lineRange": [
+            41,
+            64
+          ],
+          "explanation": "Composer features: AI writing tools, quick replies, Markdown sent as HTML, templates, signatures, undo send (5 to 30 s, matching `undoSendSeconds`). 'Send later' is \u26a0\ufe0f because the app itself sends the message, so the computer must be on with the app open. Read receipts, confidential mode, Hide My Email and similar features are \u274c because they depend on closed provider services.",
+          "tourOrder": 1
+        },
+        {
+          "title": "Search",
+          "lineRange": [
+            66,
+            74
+          ],
+          "explanation": "Four search tiers: server keyword search, natural-language search turned into filters by the AI (`search_plan.dart`), semantic vector search, and 'ask your inbox' answers (the `_SearchHeader` answer card in `message_list.dart`). Offline full-text search is \ud83d\udd1c because the local index stores meaning vectors, not text.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Model choices from benchmarks",
+          "lineRange": [
+            76,
+            88
+          ],
+          "explanation": "Gives one model per job with measured results from `tool/model_bench.dart` on an M3 Pro: gemma4:12b-mlx for sorting and writing, embeddinggemma:300m for search, and translategemma:4b for reading translations. qwen3.6 was faster at writing but used more memory and sorted less accurately, so it is not recommended. This is why `AppSettings` has separate fast, writing, embedding and translation model fields.",
+          "tourOrder": 15
+        },
+        {
+          "title": "How semantic search works",
+          "lineRange": [
+            90,
+            91
+          ],
+          "explanation": "Each email (subject, sender, date, first 1,500 characters) becomes a 512-dimension embeddinggemma vector, stored per account in about 2 KB per email. A query is an exact linear scan (~10 ms for 20k emails), combined with server keyword results and reranked by the AI. The design choice is stated directly: no vector database is needed at this size. Background indexing depth (3,000) matches the `indexDepth` default in `AppSettings`.",
+          "tourOrder": 9
+        }
+      ]
+    },
+    "lib/models/triage.dart": {
+      "overview": "The data model for AI triage: a `MailCategory` enum, a `MailPriority` enum and the `Triage` result class that the local model assigns to each email. It is small but central. Smart inbox views, list tags, sidebar categories and the phishing banner all read it, and it is saved to the triage cache as JSON. It belongs to the 'Domain Models' and 'Smart Inbox Triage' tour steps.",
+      "sections": [
+        {
+          "title": "MailCategory enum with prompt text",
+          "lineRange": [
+            1,
+            22
+          ],
+          "explanation": "An enhanced enum where each value has a UI `label` and a `description`. The description reads like guidance for the AI ('bills, banks, receipts\u2026'), so it is presumably used to build the triage prompt; that keeps the UI and prompt definitions in one place. The `notification` value shows as 'Updates', so `name` (used for storage and AI output) and `label` (shown in the UI) differ. `parse` falls back to `other` for unknown or null strings, so an unexpected model output cannot crash the app.",
+          "tourOrder": 4
+        },
+        {
+          "title": "MailPriority enum",
+          "lineRange": [
+            24,
+            33
+          ],
+          "explanation": "Three levels with a tolerant `parse` that defaults to `normal`. These names are the strings the model returns (compare the `['high','normal','low']` enum in `tool/model_bench.dart`'s JSON schema).",
+          "tourOrder": 8
+        },
+        {
+          "title": "Triage value and JSON",
+          "lineRange": [
+            35,
+            63
+          ],
+          "explanation": "An immutable result with category, priority, `needsReply` and an optional `suspicious` flag. `toJson` writes `suspicious` only when true, using collection-if, so cached entries stay small and older cache files without the key still read as `false`. `fromJson` uses `== true` checks instead of casts, so missing or wrongly typed values become `false` rather than throwing. That makes the cache robust to schema changes.",
+          "tourOrder": 8
+        }
+      ]
+    },
+    "android/app/src/main/AndroidManifest.xml": {
+      "overview": "The Android app manifest, mostly the Flutter template. It declares the INTERNET permission, the app label, the single `MainActivity` that hosts Flutter, and the text-processing query Flutter needs. Its one significant change is `android:usesCleartextTraffic=\"true\"`. It belongs to the 'Platform Config and Entitlements' tour step, next to the macOS entitlements that handle the same network questions on the main desktop target.",
+      "sections": [
+        {
+          "title": "Permissions and application flags",
+          "lineRange": [
+            1,
+            7
+          ],
+          "explanation": "`INTERNET` is required for IMAP, SMTP, OAuth and Ollama. `usesCleartextTraffic=\"true\"` allows plain `http://` connections, which the default Ollama URL (`http://localhost:11434`, or a LAN IP from a phone) needs. Risk: it allows cleartext HTTP to *every* host app-wide. A `networkSecurityConfig` that allows cleartext only for local and Ollama hosts would be narrower.",
+          "tourOrder": 14
+        },
+        {
+          "title": "MainActivity",
+          "lineRange": [
+            8,
+            29
+          ],
+          "explanation": "Standard Flutter activity configuration: `singleTop` launch mode, a long `configChanges` list so Flutter handles rotation, resizing and theme changes itself without the activity being recreated, hardware acceleration, and `adjustResize` so the keyboard resizes the window (this matters for the composer and search field). The `NormalTheme` meta-data sets the window background behind Flutter after the launch theme.",
+          "tourOrder": 14
+        },
+        {
+          "title": "Embedding metadata and queries",
+          "lineRange": [
+            30,
+            47
+          ],
+          "explanation": "`flutterEmbedding=2` tells the Flutter tool to generate the v2 plugin registrant; it must not be removed. The `<queries>` block declares package visibility for `PROCESS_TEXT` intents (Android 11+), which Flutter's text-processing plugin uses for selection actions.",
+          "tourOrder": 14
+        }
+      ]
+    },
+    "README.md": {
+      "overview": "The project README is the front door: it explains that Hearthmail is a Flutter email client whose AI runs entirely through a local Ollama server, so no email content leaves the machine. It maps every AI feature to where it appears in the UI, lists the Ollama models to pull, describes multi-account sign-in, and sketches the `lib/` layout. Tour step 1 uses it as the feature map that later steps implement one row at a time.",
+      "sections": [
+        {
+          "title": "Title and privacy promise",
+          "lineRange": [
+            1,
+            5
+          ],
+          "explanation": "States the two defining constraints of the project: all AI goes through [Ollama](https://ollama.com) on the local computer, and one Flutter codebase targets macOS, Windows, Android and iOS. The privacy claim (\"no email content leaves your computer\") is the design driver behind the pluggable `AiProvider` layer and the on-disk caches you will see later.",
+          "tourOrder": 1
+        },
+        {
+          "title": "AI feature map",
+          "lineRange": [
+            7,
+            34
+          ],
+          "explanation": "A Markdown table pairs each AI feature (Smart inbox, Summarize, Quick replies, AI search, Catch me up, Search by meaning, Translate, Phishing warning, ...) with the UI surface that hosts it: sidebar, reading pane, composer or search bar. Use it as an index: Smart inbox maps to `sidebar.dart` and `triage_cache.dart`, AI search to `search_plan.dart`, and so on. The paragraph after the table lists the non-AI Apple Mail/Gmail features, and the last lines note that the composer sends light Markdown as HTML with a plain-text fallback, which is implemented in `MailService.build`.",
+          "tourOrder": 1
+        },
+        {
+          "title": "Running on macOS",
+          "lineRange": [
+            36,
+            51
+          ],
+          "explanation": "Lists the build prerequisites (Xcode, Flutter, Ollama) and the three models with their roles: `gemma4:12b` for sorting/summaries/writing, `embeddinggemma:300m` for semantic search and the optional `translategemma:4b`. These names show up again as defaults and as helper text in the Settings page model pickers.",
+          "tourOrder": 1
+        },
+        {
+          "title": "Accounts and sign-in",
+          "lineRange": [
+            53,
+            71
+          ],
+          "explanation": "Explains that multiple accounts stay connected at once and merge into **All Inboxes**, with each message colored by account (the `accountColor`/`AccountBadge` helpers in `sidebar.dart`). It names the three sign-in paths (Google OAuth, Microsoft OAuth, app password with autodetection or autoconfig), which correspond exactly to the chooser in `account_setup_page.dart`. Note the README says secrets go to the macOS Keychain; on other platforms that depends on `flutter_secure_storage` behaviour.",
+          "tourOrder": 1
+        },
+        {
+          "title": "Project layout",
+          "lineRange": [
+            73,
+            90
+          ],
+          "explanation": "A compact tree of the most important source files. Notably, the AI layer under `services/ai/` is described as \"independent of Flutter and the mail code\", which is why `EmailContent` exists as a library-neutral model. `mail_service.dart` is described as \"one per account, operations serialized\", the key concurrency property explained in step 6.",
+          "tourOrder": 1
+        },
+        {
+          "title": "Other platforms, tests, license",
+          "lineRange": [
+            92,
+            109
+          ],
+          "explanation": "Phones cannot run Ollama, so the suggested approach is to point the Ollama address setting at a Mac on the LAN (started with `OLLAMA_HOST=0.0.0.0`) or implement another `AiProvider`. Be aware that exposing Ollama on `0.0.0.0` makes it reachable to anyone on that network and that the traffic is plain HTTP, which partly weakens the \"nothing leaves your computer\" promise. The tests section distinguishes offline unit tests from the live `tool/ai_smoke.dart` check.",
+          "tourOrder": 1
+        }
+      ]
+    },
+    "lib/models/email_content.dart": {
+      "overview": "A tiny, immutable value class carrying the facts about one email that the AI needs: id, sender, recipients, subject, date, body and unread state. It deliberately has no dependency on `enough_mail`, so the AI layer (`email_ai.dart`) can be reused and unit-tested without a mail server. `MailService.toContent` is the adapter that converts a `MimeMessage` into this shape. It is one of the domain models introduced in tour step 4.",
+      "sections": [
+        {
+          "title": "Constructor and fields",
+          "lineRange": [
+            1,
+            21
+          ],
+          "explanation": "A `const` constructor with required identity fields and optional `to`, `date` and `isUnread`. The `id` doc comment matters: it is the stable key used to cache AI results, which `MailService.keyOf` derives from the Message-ID header (falling back to `mailbox#uid`). All fields are `final`, so instances are safe to share between isolates of work and caches.",
+          "tourOrder": 4
+        },
+        {
+          "title": "Snippet for previews",
+          "lineRange": [
+            23,
+            26
+          ],
+          "explanation": "Collapses all whitespace runs into single spaces and clips at 280 characters with an ellipsis. This is a cheap, pure getter, but note it recomputes the regex replacement on every call; callers that read it in hot paths (list rendering) pay that cost each time.",
+          "tourOrder": 4
+        },
+        {
+          "title": "Prompt rendering with truncation",
+          "lineRange": [
+            28,
+            43
+          ],
+          "explanation": "`forPrompt` renders the email as a header block plus body, which is the text actually fed to the local model. Bodies over `maxBodyChars` (12,000 by default) are cut and tagged with `[\u2026email truncated\u2026]` so one huge newsletter cannot overflow the model's context window. Collection-`if` elements omit `To:` and `Date:` when absent, keeping prompts compact; the date is converted with `toLocal()` so the model reasons in the user's timezone.",
+          "tourOrder": 4
+        }
+      ]
+    },
+    "lib/services/triage_cache.dart": {
+      "overview": "Persists AI triage results (category, priority, needs-reply) per message so each email is sorted by the model only once. There is one JSON file per account in the application support directory, plus an in-memory variant for tests. It backs the Smart inbox views that the sidebar shows in tour step 8: without it, every launch would re-run the local model over the whole inbox.",
+      "sections": [
+        {
+          "title": "Imports",
+          "lineRange": [
+            1,
+            6
+          ],
+          "explanation": "Uses `dart:io` for file access, `dart:convert` for JSON and `path_provider` to locate the platform's application support directory. Only the `Triage` model is imported from the app, keeping the cache independent of UI and state.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Constructors and storage fields",
+          "lineRange": [
+            8,
+            16
+          ],
+          "explanation": "A private constructor is used by `open`, while `TriageCache.memory` creates a cache with a `null` file so nothing is ever written: a simple way to make tests and previews side-effect free. The initial data is copied with a spread (`{...data}`) so the caller's const map is never mutated.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Opening the per-account file",
+          "lineRange": [
+            18,
+            31
+          ],
+          "explanation": "The account id is sanitized (anything outside `[A-Za-z0-9_-]` becomes `_`) before being used in the file name, preventing path tricks from addresses containing `/` or `..`. Note two different addresses could sanitize to the same name (e.g. `a.b@x` vs `a_b@x`), which would share a cache; harmless here because keys are Message-IDs. Corrupt JSON is swallowed on purpose: the comment says the only cost is a re-sort.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Lookup operators",
+          "lineRange": [
+            33,
+            34
+          ],
+          "explanation": "An index operator and `contains` give map-like reads without exposing the underlying `Map`, so all writes are forced through `putAll` where persistence happens.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Batch write with eviction",
+          "lineRange": [
+            36,
+            47
+          ],
+          "explanation": "Entries are merged, then the map is trimmed to 5,000 by removing the first keys in iteration order. Dart's default `Map` is a `LinkedHashMap`, so this evicts the oldest *inserted* keys; re-sorting an existing key does not refresh its position, so it is FIFO rather than true LRU. Every call rewrites the whole file with `writeAsString`, which is fine at this size but is not atomic: a crash mid-write could leave truncated JSON, which `open` then treats as a corrupt cache. Concurrent `putAll` calls are not serialized either.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Clearing the cache",
+          "lineRange": [
+            49,
+            53
+          ],
+          "explanation": "Empties memory and deletes the file, used when the user forces a full re-sort or removes an account. Copying `_file` into a local variable enables Dart's null-promotion, since fields cannot be promoted directly.",
+          "tourOrder": 8
+        }
+      ]
+    },
+    "lib/services/ai/ai_provider.dart": {
+      "overview": "Defines the seam between Hearthmail and any AI backend: an abstract `AiProvider` with model listing, streaming chat (optionally JSON-schema constrained) and embeddings, plus message/exception types. An extension adds `complete` and `completeJson` helpers that collect the stream. `OllamaProvider` implements it today, and the README suggests implementing it again for on-device phone models; this is the core of tour step 5's pluggable local AI layer.",
+      "sections": [
+        {
+          "title": "The AiProvider interface",
+          "lineRange": [
+            1,
+            26
+          ],
+          "explanation": "Three capabilities define a backend: `listModels`, `chat` returning a `Stream<String>` of chunks (so UI can show text as it arrives), and `embed`. `embed` has a default body that throws, so a provider without embedding support still compiles and semantic search simply reports it as unavailable. `close` is a no-op hook for releasing HTTP clients. The `jsonSchema` parameter lets callers ask the backend for structured output, which Ollama supports natively.",
+          "tourOrder": 5
+        },
+        {
+          "title": "Roles and messages",
+          "lineRange": [
+            28,
+            38
+          ],
+          "explanation": "`AiRole` mirrors the familiar system/user/assistant chat roles, and `AiMessage` offers named `const` constructors (`AiMessage.system(...)`) so prompt code reads naturally and allocates nothing at runtime for constant prompts.",
+          "tourOrder": 5
+        },
+        {
+          "title": "AiException",
+          "lineRange": [
+            40,
+            45
+          ],
+          "explanation": "A simple exception whose `toString` returns only the message, so it can be shown directly in the UI (for instance the sidebar's \"AI offline\" banner) without a class-name prefix.",
+          "tourOrder": 5
+        },
+        {
+          "title": "complete: whole-reply helper",
+          "lineRange": [
+            47,
+            60
+          ],
+          "explanation": "An extension method on `AiProvider`, so every implementation gets it for free without inheritance. It drains the stream into a `StringBuffer` and trims the result. Because it is an extension, implementations cannot override it, which keeps behaviour consistent across backends.",
+          "tourOrder": 5
+        },
+        {
+          "title": "completeJson: tolerant JSON decoding",
+          "lineRange": [
+            62,
+            87
+          ],
+          "explanation": "Requests a schema-constrained reply at a low temperature (0.1) for determinism, then decodes it. If strict decoding fails, it falls back to slicing from the first `{` to the last `}`, rescuing models that wrap JSON in prose or code fences. The fallback can still throw a raw `FormatException` (not an `AiException`) if the slice is invalid, and the `as Map<String, dynamic>` cast will throw if the model returns a JSON array; callers should be prepared for both. Consumers such as `SearchPlan.fromJson` add their own defensive parsing on top.",
+          "tourOrder": 5
+        }
+      ]
+    },
+    "lib/models/search_plan.dart": {
+      "overview": "`SearchPlan` is the structured form of a natural-language search: the AI turns \"invoices from Acme last month\" into keywords, sender, dates and flags. The class then compiles that plan into two server query languages: standard IMAP SEARCH (RFC 3501) and Gmail's X-GM-RAW syntax. It is a domain model in tour step 4 and the bridge between the AI and the mail server in the AI search flow of step 9.",
+      "sections": [
+        {
+          "title": "Fields and constructor",
+          "lineRange": [
+            1,
+            24
+          ],
+          "explanation": "Every criterion is optional; defaults are an empty keyword list and `false` flags, so an empty plan means \"recent mail\". Keeping this a plain immutable value lets it be logged, compared and described without touching the network.",
+          "tourOrder": 4
+        },
+        {
+          "title": "Defensive JSON parsing",
+          "lineRange": [
+            26,
+            53
+          ],
+          "explanation": "`fromJson` assumes the model's output may be sloppy: the local `str` helper rejects non-strings, blanks and the literal string `\"null\"` (a common LLM habit), and `date` uses `DateTime.tryParse` so a bad date silently drops the filter instead of throwing. Keywords are trimmed and filtered, and booleans only count when they are exactly `true`. This is a good pattern for any model-produced JSON: validate field by field rather than trusting the schema.",
+          "tourOrder": 4
+        },
+        {
+          "title": "withoutKeywords and isEmpty",
+          "lineRange": [
+            55,
+            74
+          ],
+          "explanation": "`withoutKeywords` produces a relaxed plan, presumably used to retry a search when keyword matching is too strict. Notice it also drops `subject`, not just keywords; that may be intentional (subject is text-like) but is easy to miss. `isEmpty` checks every criterion and drives the decision in `MailService.search` to fall back from Gmail syntax to plain IMAP.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Human-readable description",
+          "lineRange": [
+            76,
+            90
+          ],
+          "explanation": "Builds the line shown above search results (for example `about \"invoice\", from acme, after 2026-10-01`) so the user can see how the AI interpreted the question. Showing the interpreted plan is an important transparency feature when a model, not the user, writes the query.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Compiling to IMAP SEARCH",
+          "lineRange": [
+            92,
+            111
+          ],
+          "explanation": "Maps each criterion to an RFC 3501 key (`FROM`, `SINCE`, `UNSEEN`, ...). IMAP `OR` is binary, so multiple keywords are folded right-to-left into nested `OR TEXT a OR TEXT b TEXT c` and parenthesized. `hasAttachment` is silently ignored here because standard IMAP has no attachment search key, so non-Gmail accounts may return more results than the description suggests. An empty plan becomes `ALL`.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Compiling to Gmail query",
+          "lineRange": [
+            113,
+            129
+          ],
+          "explanation": "The same plan rendered in Gmail's search language (`from:`, `after:yyyy/mm/dd`, `is:starred`, `has:attachment`), which supports attachments and ranks better than plain IMAP on Gmail. Keywords are OR-ed inside parentheses. `MailService.search` later wraps this in `X-GM-RAW \"...\"` and re-escapes quotes.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Quoting and date helpers",
+          "lineRange": [
+            131,
+            143
+          ],
+          "explanation": "`_q` produces an IMAP quoted string, escaping backslashes and double quotes so user/AI text cannot break out of the string. `_g` quotes multi-word Gmail terms but simply strips embedded quotes. `_imapDate` formats `d-Mon-yyyy` as RFC 3501 requires (English month names regardless of locale), and `_ymd` zero-pads for Gmail and display.",
+          "tourOrder": 9
+        }
+      ]
+    },
+    "lib/services/mail_service.dart": {
+      "overview": "`MailService` is the single gateway to one account's mail server: IMAP for reading and organizing, SMTP for sending, built on `enough_mail`'s `MailClient`. Its central design rule is that every IMAP operation is serialized through a promise chain and re-selects its folder, because IMAP state (the selected mailbox) is connection-wide. It also hosts static helpers that turn `MimeMessage`s into display strings, AI-ready `EmailContent`, unsubscribe info, phishing hints and thread keys. This is the main file of tour step 6 and is reused by sending in step 12.",
+      "sections": [
+        {
+          "title": "Imports and credential types",
+          "lineRange": [
+            1,
+            30
+          ],
+          "explanation": "`MailCredentials` is a Dart 3 `sealed` class with two subclasses, so the `switch` in `_account` is checked for exhaustiveness at compile time. `OAuthCredentials` carries the token, the `OAuthClient` able to refresh it, and an optional `onTokenRefreshed` callback so refreshed tokens can be written back to the Keychain.",
+          "tourOrder": 6
+        },
+        {
+          "title": "Constructing the MailClient",
+          "lineRange": [
+            32,
+            59
+          ],
+          "explanation": "The doc comment explains the core risk the class guards against: a background Inbox refresh slipping between \"select Sent\" and \"delete message 12\". The `MailClient` is configured to download whole messages up to 256 KB so previews and AI sorting avoid extra round trips, with 30s response / 10s write timeouts. For OAuth accounts it wires `refresh` to the OAuth client and `onConfigChanged` to persist the refreshed token; for passwords both are `null`.",
+          "tourOrder": 6
+        },
+        {
+          "title": "Mapping config to MailAccount",
+          "lineRange": [
+            61,
+            101
+          ],
+          "explanation": "A `switch` expression with object patterns (`PasswordCredentials(:final password)`) destructures the credentials and builds either a password-based or XOAUTH2-based `MailAccount`. TLS mode is chosen per direction: implicit TLS (`ssl`) unless the config says STARTTLS. `outgoingClientDomain: 'localhost'` avoids leaking the machine's hostname in the SMTP EHLO greeting. `me` is the `From` address used when building outgoing mail.",
+          "tourOrder": 6
+        },
+        {
+          "title": "Serialization and reconnect",
+          "lineRange": [
+            102,
+            151
+          ],
+          "explanation": "`_serial` chains each operation onto `_tail`, so operations run strictly one at a time; the tail swallows errors (`onError: (_) {}`) so one failure does not poison the queue, while the caller still receives the original error. On anything that *looks* like connection loss (matched by exception type or message substrings such as `closed`), it reconnects once and retries. The substring heuristic is broad: a server error mentioning \"closed\" would also trigger a reconnect and a retry, which for non-idempotent operations like `moveMessage` could act twice. `_ensure` skips a redundant SELECT when the right mailbox is already selected.",
+          "tourOrder": 6
+        },
+        {
+          "title": "Listing folders and pages",
+          "lineRange": [
+            153,
+            195
+          ],
+          "explanation": "`mailboxes` asks for a sensible order (Inbox, Starred, Drafts, Sent, ...) and hides non-selectable container folders. `fetchPage` always re-selects to get a fresh message count, computes the page bound, and fetches with `fullWhenWithinSize`, then sorts by date descending because server sequence order is not guaranteed to match date order. `ensureFull` lazily downloads bodies that were too large, using a longer 60s timeout.",
+          "tourOrder": 6
+        },
+        {
+          "title": "Server-side search",
+          "lineRange": [
+            197,
+            237
+          ],
+          "explanation": "`searchFolder` prefers Gmail's All Mail so search covers archived mail. `search` drops to the low-level `ImapClient` to send either `X-GM-RAW \"...\"` on Gmail or the RFC 3501 criteria from `SearchPlan`, using UID search for stable ids. Only the highest `limit` UIDs (roughly newest) are fetched. The Gmail branch strips backslashes and escapes quotes before embedding the query, guarding against IMAP command injection from AI-produced text.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Flag and move operations",
+          "lineRange": [
+            239,
+            320
+          ],
+          "explanation": "Each mutation runs inside `_serial` and calls `_ensure(box)` first, the pattern the class comment motivates. `archive` moves to the Archive folder or, on Gmail, All Mail, which mimics Gmail's own Archive by removing the Inbox label; `junk` and `moveToInbox` resolve targets by special-use flags. `fetchPart` returns a locally cached attachment when available and only goes to the network otherwise. The local `MimeMessage` flags (`isSeen`, `isFlagged`) are updated after the server call so the UI reflects the change.",
+          "tourOrder": 6
+        },
+        {
+          "title": "Building and sending mail",
+          "lineRange": [
+            322,
+            399
+          ],
+          "explanation": "`build` renders Markdown to HTML (GitHub-flavoured extension set) and a plain-text alternative, choosing multipart/mixed when there are attachments. Replies use `originalMessage` when the source message is loaded, or explicit `In-Reply-To`/`References` headers for scheduled sends (note the Dart 3.8 null-aware element `?references`). `addBinary` uses `readAsBytesSync`, which blocks the UI isolate for large attachments. `sendBuilt` marks the original as answered afterwards but ignores failures, since the send itself already succeeded.",
+          "tourOrder": 12
+        },
+        {
+          "title": "Background index fetch",
+          "lineRange": [
+            401,
+            416
+          ],
+          "explanation": "`fetchRange` walks the mailbox backwards by sequence number (newest first, skipping `skip`), optionally envelope-only, for the semantic search indexer. The comment notes the indexer uses its own connection, so it does not block the interactive queue on the main `MailService`.",
+          "tourOrder": 9
+        },
+        {
+          "title": "Static message helpers",
+          "lineRange": [
+            418,
+            574
+          ],
+          "explanation": "Pure helpers shared by UI and AI: subject/sender formatting, `bodyText` (cached per message in an `Expando`, so the cache dies with the message and never leaks), `keyOf` for stable AI cache keys, and `toContent` producing `EmailContent`. `unsubscribeOf` parses RFC 2369/8058 headers and only allows one-click over HTTPS. `suspicionOf` is a lightweight phishing heuristic (a display name containing a different address, or a brand name not matching the domain); it can false-positive on legitimate third-party senders mentioning a brand. `threadKeyOf` groups conversations by first `References` id, then `In-Reply-To`, then Message-ID, falling back to a normalized subject that strips multilingual reply prefixes (Re, Fwd, AW, SV, ...).",
+          "tourOrder": 6
+        }
+      ]
+    },
+    "lib/services/user_data.dart": {
+      "overview": "Stores the user's personal mail organization on the device: VIPs, blocked senders, muted threads, snoozes (\"Remind me\"), follow-up reminders, scheduled \"Send later\" messages, templates, per-account signatures and an autocomplete contact book. Everything is serialized as one JSON blob in `SharedPreferences` under a versioned key. It is the data layer behind the local organization features in tour step 13 and is edited directly by the Settings page.",
+      "sections": [
+        {
+          "title": "Snooze record",
+          "lineRange": [
+            1,
+            37
+          ],
+          "explanation": "A snoozed message keeps its cache key, account, due time and subject, plus the folder `path` and `uid` so it can be brought back even if it is no longer loaded in memory. `isDue` uses `!isBefore` so a snooze due exactly now counts as due. `fromJson` tolerates missing optional fields with `?? ''` defaults, which keeps older saved data loadable after new fields are added.",
+          "tourOrder": 13
+        },
+        {
+          "title": "FollowUp record",
+          "lineRange": [
+            39,
+            57
+          ],
+          "explanation": "Represents a sent message to chase if nobody replies by `due`. The JSON keys are short (`id`, `account`) and differ from the Dart field names, so renaming fields in code does not break stored data.",
+          "tourOrder": 13
+        },
+        {
+          "title": "ScheduledMail record",
+          "lineRange": [
+            59,
+            110
+          ],
+          "explanation": "Everything needed to send a message later without the composer: recipients as strings, body, threading headers (`inReplyToId`, `references`) and attachment file paths. This matches the `inReplyToId`/`references` parameters of `MailService.build`. Two risks: the full body is stored in plaintext `SharedPreferences`, and attachments are stored as paths, so a file moved or deleted before send time will fail.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Template record",
+          "lineRange": [
+            112,
+            118
+          ],
+          "explanation": "A minimal named body for reusable replies, with fully defaulted parsing.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Opening and in-memory state",
+          "lineRange": [
+            120,
+            154
+          ],
+          "explanation": "`open` reads the JSON blob and silently ignores parse errors, meaning corrupt data resets to empty rather than crashing the app (at the cost of silently losing the user's lists). `UserData.memory()` has no prefs, so `save` becomes a no-op in tests. The public fields are mutable collections that `AppState` and the Settings page modify directly; contacts use a Dart record `(String, int)` for name and usage count.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Load and serialize",
+          "lineRange": [
+            156,
+            184
+          ],
+          "explanation": "`_load` and `toJson` are mirror images, mapping each collection to a JSON list or map. Records are not JSON-encodable, so contacts are stored as two-element lists `[name, count]` and rebuilt on load. Note `_load` uses `addAll`, so calling it twice would merge rather than replace.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Saving with a bounded contact list",
+          "lineRange": [
+            186,
+            195
+          ],
+          "explanation": "Before writing, contacts beyond 3,000 are pruned by lowest usage count, keeping the stored blob bounded. The whole object is re-encoded on every save; the Settings page calls `save` on every keystroke in a signature field, so this is frequent but cheap at this size.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Rules and autocomplete",
+          "lineRange": [
+            197,
+            227
+          ],
+          "explanation": "`isBlocked` matches either the exact address or an `@domain` entry, which is how domain-wide blocking works. `noteContact` ignores no-reply style addresses and accumulates a weight per address, preserving an earlier name if the new one is blank. `suggestContacts` matches the prefix against the address or any word of the name and ranks by usage count; it scans all contacts each time, which is fine for at most 3,000 entries.",
+          "tourOrder": 13
+        }
+      ]
+    },
+    "lib/ui/sidebar.dart": {
+      "overview": "The sidebar is the app's navigation column: unified inbox, special views (VIPs, Reminders, Scheduled, Follow up), the AI Smart inbox views (Priority, Needs reply, one entry per category) and an expandable list of accounts and their folders. It watches `AppState` and calls its methods to switch views, so it holds almost no state of its own. It is where the Smart inbox triage of tour step 8 becomes visible, and it also exports small color/icon helpers reused elsewhere.",
+      "sections": [
+        {
+          "title": "Category colors",
+          "lineRange": [
+            1,
+            21
+          ],
+          "explanation": "An exhaustive `switch` expression maps each `MailCategory` to a fixed color, so adding a category without a color is a compile error. These colors are reused for category dots in the sidebar and badges in message lists.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Account colors and folder icons",
+          "lineRange": [
+            23,
+            45
+          ],
+          "explanation": "`accountColor` cycles through eight colors by index, giving each account a stable dot in merged lists (wrapping after eight accounts, so the ninth repeats the first). `mailboxIcon` picks an icon from IMAP special-use flags rather than folder names, so it works across languages and providers.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Widget and local state",
+          "lineRange": [
+            47,
+            58
+          ],
+          "explanation": "`Sidebar` is stateful only to remember which accounts are expanded (`_expanded`). The optional `onNavigate` callback lets the phone layout close its drawer after a tap, keeping the widget layout-agnostic. The expanded set is not persisted, so it resets on each launch.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Row builders",
+          "lineRange": [
+            60,
+            120
+          ],
+          "explanation": "Inside `build`, local functions `item`, `icon`, `dot` and `header` act as tiny private widgets sharing the theme. `item` wraps every tap so `onNavigate` always fires after the action. `?trailing` is Dart's null-aware collection element: the trailing widget is included only when non-null.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Unified and special views",
+          "lineRange": [
+            122,
+            171
+          ],
+          "explanation": "`usedCategories` is built with an `if-case` pattern so only categories actually assigned to current inbox mail are listed, avoiding empty views. Special views appear only when their data exists (e.g. Reminders only with snoozes). Each entry compares `state.view` against a `const MailView` value, which works because `MailView` implements value equality; counts come from `state.unreadFor`. Note `usedCategories` is recomputed on every rebuild by calling `triageOf` for every inbox message.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Smart inbox section",
+          "lineRange": [
+            172,
+            205
+          ],
+          "explanation": "Shown only when the local AI is ready. The header shows live progress (`Sorting x/y`) while `state.sorting`, otherwise a \u2728 button that forces a full re-sort via `sortInboxes(force: true)`, bypassing the triage cache. Priority and Needs reply are fixed entries, followed by one entry per used category in enum order.",
+          "tourOrder": 8
+        },
+        {
+          "title": "Accounts and folders",
+          "lineRange": [
+            206,
+            248
+          ],
+          "explanation": "The Accounts header pushes `AccountSetupPage` to add another account. Each account row toggles expansion, and its trailing widget reflects connection status with a `switch` on `ConnectionStatus`: a spinner while connecting, an error icon that retries on tap, or an expand chevron. Expanded accounts list their folders indented; tapping one calls `state.openFolder`. Unread counts are only computed from loaded inbox messages, so they reflect the fetched page, not the server total.",
+          "tourOrder": 8
+        },
+        {
+          "title": "AI offline banner",
+          "lineRange": [
+            250,
+            266
+          ],
+          "explanation": "When `aiError` is set, a warning row is pinned below the list with a Retry button wired directly to `state.refreshAi`. Keeping it at the bottom outside the `ListView` keeps it visible regardless of scroll.",
+          "tourOrder": 8
+        },
+        {
+          "title": "AccountBadge widget",
+          "lineRange": [
+            268,
+            289
+          ],
+          "explanation": "A small dot-plus-email label used in merged message lists to show which account a message belongs to, reusing `accountColor` so colors match the sidebar.",
+          "tourOrder": 8
+        }
+      ]
+    },
+    "lib/ui/settings_page.dart": {
+      "overview": "The Settings screen collects every user preference: Ollama address and model choices, semantic search and index depth, translation, undo-send delay and signatures, VIPs and blocked senders, writing style, inbox behaviour, OAuth client registrations and account removal. It reads and writes through `AppState` (`updateSettings` with immutable `copyWith` snapshots) and edits `UserData` collections directly. It is the UI half of tour step 13.",
+      "sections": [
+        {
+          "title": "Imports and widget",
+          "lineRange": [
+            1,
+            15
+          ],
+          "explanation": "A standard `StatefulWidget`, needed because the page owns several `TextEditingController`s. `material_ui` is the Material widget import the project uses throughout the UI.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Controllers and lifecycle",
+          "lineRange": [
+            17,
+            44
+          ],
+          "explanation": "`late final` fields are initialized lazily on first access, which lets them use `context.read<AppState>()` without an `initState`. The signature controllers are built once from the accounts present when the page opened; an account added while Settings is open gets no signature field (the later `if-case` safely skips it). `dispose` cleans up every controller, and `_save` is a one-line funnel to `AppState.updateSettings`.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Build setup and helpers",
+          "lineRange": [
+            46,
+            72
+          ],
+          "explanation": "The page watches `AppState` so status and model lists update live. Model lists are filtered with `AppState.isChatModel`/`isEmbeddingModel` and a name check for `translategemma`. `modelPicker` only sets `initialValue` when the saved model is installed, avoiding a Dropdown assertion error for unknown values, and disables itself when no models exist.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Local AI section",
+          "lineRange": [
+            80,
+            127
+          ],
+          "explanation": "Shows connection status and lets the user change the Ollama address. The Reconnect button saves the URL if it changed (which reconnects through settings) or else calls `refreshAi`, guarding with `_checking` and a `mounted` check after the await. Separate fast and writing models let users trade quality for memory, as the helper text notes.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Search section",
+          "lineRange": [
+            128,
+            173
+          ],
+          "explanation": "Toggles semantic search and explains why it may be unavailable (no embedding model installed). Changing index depth saves and immediately re-runs `indexAll`; Rebuild is disabled while indexing. The depth dropdown falls back to 3000 when the stored value is not one of the offered choices.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Translation and sending",
+          "lineRange": [
+            174,
+            232
+          ],
+          "explanation": "`'auto'` is used as a sentinel for the translation model, displayed as \"Automatic\" or \"Same as writing model\". Undo-send offers fixed delays. Signatures write straight into `state.userData.signatures` and call `save()` on every keystroke without notifying listeners, which is acceptable because only this page shows them, but it bypasses `AppState`'s usual mutation path.",
+          "tourOrder": 13
+        },
+        {
+          "title": "People and writing style",
+          "lineRange": [
+            233,
+            267
+          ],
+          "explanation": "VIP and blocked lists are rendered as deletable chips calling `toggleVip`/`unblock` on `AppState`. Name and style notes save on every change; the style notes feed AI writing prompts so drafts match the user's voice.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Inbox and sign-in apps",
+          "lineRange": [
+            268,
+            308
+          ],
+          "explanation": "Switches for automatic AI sorting and remote image loading (off by default blocks tracking pixels). The sign-in fields store the user's own Google/Microsoft OAuth client IDs. Note these use `state.settings.copyWith` while other sections use the `s` snapshot from build time; both work, but mixing them is a subtle inconsistency. The Google secret is obscured here but not on the account setup page.",
+          "tourOrder": 13
+        },
+        {
+          "title": "Accounts section",
+          "lineRange": [
+            309,
+            364
+          ],
+          "explanation": "Lists each account with a status icon and a subtitle built from a nested `switch` on `AuthType`. Removal is guarded by a confirmation dialog that clarifies mail stays on the server, then calls `state.removeAccount`. An Add account button pushes `AccountSetupPage`.",
+          "tourOrder": 13
+        }
+      ]
+    },
+    "lib/ui/account_setup_page.dart": {
+      "overview": "The account setup screen handles all three ways to add a mailbox: Sign in with Google, Sign in with Microsoft (both OAuth via the user's own app registration) and app password with provider presets or automatic server discovery. Every path builds an `AccountConfig`, verifies it with `AppState.testAccount` before saving, and then calls `addAccount`, which stores secrets in the Keychain. It is used as the first-run screen and as a pushed page, and is the UI half of tour step 7.",
+      "sections": [
+        {
+          "title": "Widget and form state",
+          "lineRange": [
+            1,
+            59
+          ],
+          "explanation": "`isFirstRun` switches between a welcome layout with no AppBar and a normal pushed page. State holds controllers for the password form, a detected `ProviderPreset`, busy/discovering flags, the chosen `_method` (null while choosing) and OAuth client fields. `dispose` loops over every controller, an easy-to-maintain pattern.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Presets and server discovery",
+          "lineRange": [
+            61,
+            102
+          ],
+          "explanation": "As the email is typed, `ProviderPreset.forEmail` fills known servers instantly. For unknown domains, `_discover` (run when the email field loses focus) uses `enough_mail`'s `Discover`, which queries Mozilla's ISP database, autoconfig and DNS, and opens the advanced section if nothing is found. `_lastDiscovered` prevents repeating the network lookup for the same address, and every `setState` after an await is guarded by `mounted`.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Password sign-in flow",
+          "lineRange": [
+            104,
+            159
+          ],
+          "explanation": "Validates input, falls back to discovery if hosts are empty, builds an `AccountConfig` with the lowercase email as id, and tests the connection before saving. Spaces are removed from app passwords only for known presets, since providers like Gmail display them grouped. Risks: after discovery it only re-checks the IMAP host, so an empty SMTP host can slip through; and if `addAccount` throws, `_busy` is never reset, leaving the button disabled.",
+          "tourOrder": 7
+        },
+        {
+          "title": "OAuth client registration",
+          "lineRange": [
+            161,
+            181
+          ],
+          "explanation": "Hearthmail has no company server, so each user registers their own OAuth app. `_hasClient` checks whether an ID is saved, and `_saveClient` persists it (plus a client secret for Google desktop apps) through `updateSettings`. There is no `mounted` check before the final `setState`.",
+          "tourOrder": 7
+        },
+        {
+          "title": "OAuth sign-in flow",
+          "lineRange": [
+            183,
+            243
+          ],
+          "explanation": "Opens the browser via `client.signIn` (PKCE plus loopback redirect, per the README), then builds a config from the provider's fixed servers and the returned email/name, and tests IMAP/SMTP with `OAuthCredentials`. Microsoft failures get an extra explanation because some organizations disable IMAP for Microsoft 365. On success the token is saved with `addAccount`, and the user's name is adopted for AI signatures if none is set. All errors are mapped through `AppState.friendlyError`.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Sign-in method chooser",
+          "lineRange": [
+            245,
+            302
+          ],
+          "explanation": "Builds three large outlined buttons using a local `option` helper. Selecting one sets `_method` and clears any previous client ID/secret input so a half-entered Google secret is not reused for Microsoft.",
+          "tourOrder": 7
+        },
+        {
+          "title": "OAuth panel",
+          "lineRange": [
+            304,
+            475
+          ],
+          "explanation": "If no client is registered, it shows numbered, selectable setup steps for Google Cloud or Microsoft Entra with a link to the console, and fields to paste the IDs. Once registered, it shows a Continue in browser button whose label reflects waiting/connecting states, plus a way to clear and change the registration. `?error` uses the null-aware collection element to insert the error only when present. The Google client secret field here is not `obscureText`, unlike in Settings.",
+          "tourOrder": 7
+        },
+        {
+          "title": "Page layout and password form",
+          "lineRange": [
+            477,
+            719
+          ],
+          "explanation": "`build` composes the welcome header, then whichever panel matches `_method`. The password form wraps fields in an `AutofillGroup` so system password managers can help, and triggers discovery when the email field loses focus. The help box shows preset-specific instructions and uses an `if-case` object pattern (`ProviderPreset(passwordUrl: final url?)`) to show a link only when the preset has one. The collapsible server settings show host/port fields with a reminder of the common TLS ports.",
+          "tourOrder": 7
+        }
+      ]
+    },
+    "tool/ai_smoke.dart": {
+      "overview": "Developer smoke-test script (dart run tool/ai_smoke.dart [model]) that exercises every EmailAi feature live against the local Ollama server using six realistic sample emails and a fixed clock, printing each result with timing and setting a failing exit code on errors.",
+      "sections": []
+    },
+    "ios/Runner/Info.plist": {
+      "overview": "iOS bundle Info.plist for the Runner app: display name \"Hearthmail\", Flutter build name/number versioning, scene-based lifecycle via SceneDelegate, launch storyboard and supported orientations for iPhone and iPad.",
+      "sections": []
+    },
+    "macos/Runner/Info.plist": {
+      "overview": "macOS bundle Info.plist for the Runner app, filling bundle name, identifier, copyright and minimum system version from xcconfig variables and Flutter build name/number.",
+      "sections": []
+    }
+  }
+}

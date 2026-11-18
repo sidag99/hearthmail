@@ -1,0 +1,3124 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "hearthmail",
+    "languages": [
+      "dart"
+    ],
+    "frameworks": [
+      "Flutter",
+      "Provider",
+      "enough_mail",
+      "Ollama"
+    ],
+    "description": "Hearthmail is a cross-platform (macOS first) email client for any IMAP/SMTP account with a private AI assistant that runs entirely on local Ollama models: smart inbox sorting, summaries, reply drafting, natural-language and semantic search, translation, plus local organization like snoozes, VIPs, send later and follow-ups.",
+    "analyzedAt": "2026-11-18T12:00:00Z",
+    "gitCommitHash": "200b914d9b55bc5d3ec24711e4b0a62e466f4ec3"
+  },
+  "nodes": [
+    {
+      "id": "domain:accounts-and-mail-sync",
+      "type": "domain",
+      "name": "Accounts & Mail Sync",
+      "summary": "Connects any IMAP/SMTP account (Google or Microsoft OAuth with PKCE, or an app password with provider presets and autodiscovery), keeps credentials in the keychain, and keeps a merged multi-account inbox fresh. Handles paging, opening full message bodies and server-side message actions.",
+      "tags": [
+        "imap",
+        "smtp",
+        "oauth",
+        "sync",
+        "accounts"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entities": [
+          "AccountConfig",
+          "ProviderPreset",
+          "AccountSession",
+          "MailService",
+          "OAuthClient",
+          "OAuthToken",
+          "MimeMessage",
+          "Mailbox"
+        ],
+        "businessRules": [
+          "Secrets (app passwords, OAuth tokens) live only in the keychain; account configs are stored without secrets",
+          "New credentials are verified with a live connect before the account is saved",
+          "Operations on one account are serialized and transparently reconnect after a connection loss",
+          "Inbox pages are 40 messages, newest first; refresh only prepends unseen UIDs",
+          "Opening an unread message marks it read on the server"
+        ],
+        "crossDomainInteractions": [
+          "Every new batch of mail is handed to Local Organization rules and to the semantic index (Search)",
+          "New mail triggers AI inbox sorting when auto-sort is on",
+          "Provides the SMTP transport used by Composing & Sending"
+        ]
+      }
+    },
+    {
+      "id": "flow:add-account-with-oauth",
+      "type": "flow",
+      "name": "Add Account with Google/Microsoft Sign-In",
+      "summary": "Signs the user in through the browser with OAuth 2.0 + PKCE and adds the account using XOAUTH2 for IMAP/SMTP.",
+      "tags": [
+        "oauth",
+        "onboarding"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "User clicks 'Sign in with Google/Microsoft' on the account setup page",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:add-account-with-oauth:save-oauth-client",
+      "type": "step",
+      "name": "Save OAuth client ID",
+      "summary": "Stores the user's own Google or Microsoft OAuth client ID/secret in settings if not yet configured.",
+      "tags": [
+        "oauth",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/account_setup_page.dart",
+      "lineRange": [
+        167,
+        181
+      ]
+    },
+    {
+      "id": "step:add-account-with-oauth:run-browser-pkce-sign-in",
+      "type": "step",
+      "name": "Run browser PKCE sign-in",
+      "summary": "Binds a loopback server, opens the consent page, receives the authorization code and exchanges it for tokens.",
+      "tags": [
+        "oauth",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/oauth.dart",
+      "lineRange": [
+        66,
+        150
+      ]
+    },
+    {
+      "id": "step:add-account-with-oauth:read-identity-claims",
+      "type": "step",
+      "name": "Read identity from ID token",
+      "summary": "Decodes the ID token claims to learn the account email and display name.",
+      "tags": [
+        "oauth",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/oauth.dart",
+      "lineRange": [
+        191,
+        200
+      ]
+    },
+    {
+      "id": "step:add-account-with-oauth:verify-connection",
+      "type": "step",
+      "name": "Verify IMAP/SMTP connection",
+      "summary": "Tests the new credentials by connecting to the provider's servers before saving.",
+      "tags": [
+        "oauth",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        371,
+        382
+      ]
+    },
+    {
+      "id": "step:add-account-with-oauth:store-token-and-account",
+      "type": "step",
+      "name": "Store token and account",
+      "summary": "Writes the OAuth token to the keychain and persists the account config.",
+      "tags": [
+        "oauth",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/settings_store.dart",
+      "lineRange": [
+        205,
+        206
+      ]
+    },
+    {
+      "id": "step:add-account-with-oauth:connect-new-account",
+      "type": "step",
+      "name": "Connect the new account",
+      "summary": "Adds the account session, replacing any old one with the same address, and connects it.",
+      "tags": [
+        "oauth",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        384,
+        401
+      ]
+    },
+    {
+      "id": "flow:add-account-with-app-password",
+      "type": "flow",
+      "name": "Add Account with App Password",
+      "summary": "Adds any IMAP/SMTP account using an app password, auto-filling server settings from presets or Mozilla autodiscovery.",
+      "tags": [
+        "onboarding",
+        "app-password"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "User fills the password form on the account setup page",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:add-account-with-app-password:match-provider-preset",
+      "type": "step",
+      "name": "Match provider preset",
+      "summary": "On each email keystroke, matches a known provider preset and pre-fills hosts and ports.",
+      "tags": [
+        "onboarding",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/account_setup_page.dart",
+      "lineRange": [
+        61,
+        72
+      ]
+    },
+    {
+      "id": "step:add-account-with-app-password:discover-servers",
+      "type": "step",
+      "name": "Discover server settings",
+      "summary": "For unknown domains, queries autodiscovery to find IMAP/SMTP hosts.",
+      "tags": [
+        "onboarding",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/account_setup_page.dart",
+      "lineRange": [
+        76,
+        102
+      ]
+    },
+    {
+      "id": "step:add-account-with-app-password:validate-and-test",
+      "type": "step",
+      "name": "Validate form and test login",
+      "summary": "Validates the form and verifies the credentials with a live connection.",
+      "tags": [
+        "onboarding",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/account_setup_page.dart",
+      "lineRange": [
+        104,
+        159
+      ]
+    },
+    {
+      "id": "step:add-account-with-app-password:store-password",
+      "type": "step",
+      "name": "Store password in keychain",
+      "summary": "Saves the app password to the keychain and the account config to preferences.",
+      "tags": [
+        "onboarding",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/settings_store.dart",
+      "lineRange": [
+        188,
+        189
+      ]
+    },
+    {
+      "id": "step:add-account-with-app-password:add-and-connect",
+      "type": "step",
+      "name": "Add and connect account",
+      "summary": "Registers the account session and connects it.",
+      "tags": [
+        "onboarding",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        384,
+        401
+      ]
+    },
+    {
+      "id": "flow:connect-and-load-inbox",
+      "type": "flow",
+      "name": "Connect Account and Load Inbox",
+      "summary": "At startup or reconnect, connects each account, lists folders and loads the first inbox page.",
+      "tags": [
+        "startup",
+        "imap",
+        "inbox"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "App startup (AppState.init) or a manual reconnect",
+        "entryType": "event"
+      }
+    },
+    {
+      "id": "step:connect-and-load-inbox:app-startup",
+      "type": "step",
+      "name": "Start app and housekeeping",
+      "summary": "Opens user data, refreshes the local AI and starts the 30-second housekeeping timer.",
+      "tags": [
+        "startup",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        293,
+        302
+      ]
+    },
+    {
+      "id": "step:connect-and-load-inbox:load-credentials",
+      "type": "step",
+      "name": "Load credentials",
+      "summary": "Loads the account's password or OAuth token from the keychain, refreshing the token if needed.",
+      "tags": [
+        "startup",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        304,
+        316
+      ]
+    },
+    {
+      "id": "step:connect-and-load-inbox:connect-imap",
+      "type": "step",
+      "name": "Connect to IMAP",
+      "summary": "Creates the MailService, connects and opens the account's triage cache.",
+      "tags": [
+        "startup",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        318,
+        341
+      ]
+    },
+    {
+      "id": "step:connect-and-load-inbox:list-mailboxes",
+      "type": "step",
+      "name": "List mailboxes",
+      "summary": "Lists folders in a friendly order and picks the inbox.",
+      "tags": [
+        "startup",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/mail_service.dart",
+      "lineRange": [
+        154,
+        166
+      ]
+    },
+    {
+      "id": "step:connect-and-load-inbox:fetch-first-page",
+      "type": "step",
+      "name": "Fetch first inbox page",
+      "summary": "Fetches the newest 40 inbox messages and tags them with their account and folder.",
+      "tags": [
+        "startup",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        348,
+        368
+      ]
+    },
+    {
+      "id": "step:connect-and-load-inbox:run-post-fetch-pipeline",
+      "type": "step",
+      "name": "Run post-fetch pipeline",
+      "summary": "Learns contacts, applies local rules and indexes the new messages.",
+      "tags": [
+        "startup",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1100,
+        1109
+      ]
+    },
+    {
+      "id": "flow:refresh-inbox",
+      "type": "flow",
+      "name": "Refresh Inbox",
+      "summary": "Fetches the newest mail for every account, prepends new messages and kicks off sorting and indexing.",
+      "tags": [
+        "sync",
+        "inbox"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "User refreshes, or a quiet background refresh",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:refresh-inbox:fetch-latest-pages",
+      "type": "step",
+      "name": "Fetch latest pages",
+      "summary": "Fetches the newest inbox page per account and retries failed accounts quietly.",
+      "tags": [
+        "sync",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        639,
+        673
+      ]
+    },
+    {
+      "id": "step:refresh-inbox:prepend-new-messages",
+      "type": "step",
+      "name": "Prepend unseen messages",
+      "summary": "Keeps only UIDs not already loaded and prepends them to the inbox.",
+      "tags": [
+        "sync",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        639,
+        673
+      ]
+    },
+    {
+      "id": "step:refresh-inbox:process-new-mail",
+      "type": "step",
+      "name": "Process new mail",
+      "summary": "Runs contact learning, block/mute rules and semantic indexing on the fresh messages.",
+      "tags": [
+        "sync",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1100,
+        1109
+      ]
+    },
+    {
+      "id": "step:refresh-inbox:trigger-ai-sorting",
+      "type": "step",
+      "name": "Trigger AI sorting and indexing",
+      "summary": "Starts AI inbox sorting (when auto-sort is on) and background semantic indexing.",
+      "tags": [
+        "sync",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1437,
+        1490
+      ]
+    },
+    {
+      "id": "flow:open-message-and-act",
+      "type": "flow",
+      "name": "Open Message and Act on It",
+      "summary": "Opens a message, downloads its full body, marks it read, and runs server actions like archive, delete, flag, junk or move.",
+      "tags": [
+        "reading",
+        "imap",
+        "actions"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "User selects a message in the list or uses the toolbar/context menu",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:open-message-and-act:select-message",
+      "type": "step",
+      "name": "Select message",
+      "summary": "Selects the message in the reading pane.",
+      "tags": [
+        "reading",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        684,
+        714
+      ]
+    },
+    {
+      "id": "step:open-message-and-act:download-full-body",
+      "type": "step",
+      "name": "Download full body",
+      "summary": "Fetches the full MIME message if only headers were loaded.",
+      "tags": [
+        "reading",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/mail_service.dart",
+      "lineRange": [
+        186,
+        192
+      ]
+    },
+    {
+      "id": "step:open-message-and-act:mark-read",
+      "type": "step",
+      "name": "Mark as read",
+      "summary": "Marks the opened message as seen on the server.",
+      "tags": [
+        "reading",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/mail_service.dart",
+      "lineRange": [
+        239,
+        244
+      ]
+    },
+    {
+      "id": "step:open-message-and-act:run-message-action",
+      "type": "step",
+      "name": "Run message action",
+      "summary": "Runs read/flag/delete/archive/junk/move through a shared runner that updates the visible lists.",
+      "tags": [
+        "reading",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        735,
+        760
+      ]
+    },
+    {
+      "id": "step:open-message-and-act:apply-on-server",
+      "type": "step",
+      "name": "Apply on server",
+      "summary": "Performs the IMAP operation, e.g. archive to the Archive folder or Gmail's All Mail.",
+      "tags": [
+        "reading",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/mail_service.dart",
+      "lineRange": [
+        258,
+        270
+      ]
+    },
+    {
+      "id": "domain:ai-triage-smart-inbox",
+      "type": "domain",
+      "name": "AI Triage & Smart Inbox",
+      "summary": "Runs a private local AI (Ollama) that sorts the inbox into categories and priorities, flags needs-reply and suspicious mail, and produces 'Catch me up' briefings. Results are cached per account so each email is sorted once.",
+      "tags": [
+        "ai",
+        "ollama",
+        "triage",
+        "smart-inbox"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entities": [
+          "AiProvider",
+          "OllamaProvider",
+          "EmailAi",
+          "TriageResult",
+          "MailCategory",
+          "MailPriority",
+          "TriageCache",
+          "AppSettings"
+        ],
+        "businessRules": [
+          "All AI runs locally through Ollama; no mail leaves the machine",
+          "Each email is triaged once; results are cached per account and trimmed to the newest 5000",
+          "Sorting is newest first in batches of 10 using schema-constrained JSON",
+          "Only one sort runs at a time; a request during sorting queues one re-run"
+        ],
+        "crossDomainInteractions": [
+          "Triggered by Accounts & Mail Sync when new mail arrives",
+          "Its suspicious flag feeds the phishing warning in Reading & AI Assistance",
+          "Supplies the shared EmailAi facade used by Search, Reading and Composing"
+        ]
+      }
+    },
+    {
+      "id": "flow:configure-local-ai",
+      "type": "flow",
+      "name": "Connect Local AI Models",
+      "summary": "Connects to the Ollama server, lists installed models and picks defaults for the assistant.",
+      "tags": [
+        "ollama",
+        "settings"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "App startup or saving AI settings",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:configure-local-ai:save-ai-settings",
+      "type": "step",
+      "name": "Save AI settings",
+      "summary": "Persists the Ollama URL and model choices and refreshes AI when they change.",
+      "tags": [
+        "ollama",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        241,
+        258
+      ]
+    },
+    {
+      "id": "step:configure-local-ai:create-provider",
+      "type": "step",
+      "name": "Create Ollama provider",
+      "summary": "Recreates the OllamaProvider from settings.",
+      "tags": [
+        "ollama",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        162,
+        184
+      ]
+    },
+    {
+      "id": "step:configure-local-ai:list-installed-models",
+      "type": "step",
+      "name": "List installed models",
+      "summary": "Calls /api/tags to list installed models with a short timeout.",
+      "tags": [
+        "ollama",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/ollama_provider.dart",
+      "lineRange": [
+        28,
+        49
+      ]
+    },
+    {
+      "id": "step:configure-local-ai:pick-default-model",
+      "type": "step",
+      "name": "Pick default model",
+      "summary": "Picks a default chat model by parameter size when none is chosen.",
+      "tags": [
+        "ollama",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        211,
+        221
+      ]
+    },
+    {
+      "id": "step:configure-local-ai:build-email-ai",
+      "type": "step",
+      "name": "Build EmailAi facade",
+      "summary": "Constructs the EmailAi facade with the fast, writing, translation and embedding models.",
+      "tags": [
+        "ollama",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        223,
+        239
+      ]
+    },
+    {
+      "id": "flow:sort-inboxes",
+      "type": "flow",
+      "name": "Sort Inboxes with AI",
+      "summary": "Collects untriaged inbox messages and has the local model categorize and prioritize them.",
+      "tags": [
+        "triage",
+        "batch"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "New mail arrives with auto-sort on, or user clicks re-sort",
+        "entryType": "event"
+      }
+    },
+    {
+      "id": "step:sort-inboxes:collect-untriaged",
+      "type": "step",
+      "name": "Collect untriaged messages",
+      "summary": "Gathers inbox messages across accounts that are not in the triage cache, newest first.",
+      "tags": [
+        "triage",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1437,
+        1490
+      ]
+    },
+    {
+      "id": "step:sort-inboxes:convert-to-content",
+      "type": "step",
+      "name": "Convert to EmailContent",
+      "summary": "Converts each MimeMessage into the protocol-independent EmailContent.",
+      "tags": [
+        "triage",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/mail_service.dart",
+      "lineRange": [
+        477,
+        485
+      ]
+    },
+    {
+      "id": "step:sort-inboxes:triage-batch",
+      "type": "step",
+      "name": "Triage a batch with the model",
+      "summary": "Sends batches of 10 emails in one JSON-schema-constrained call for category, priority, needs-reply and suspicious.",
+      "tags": [
+        "triage",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        185,
+        240
+      ]
+    },
+    {
+      "id": "step:sort-inboxes:cache-results",
+      "type": "step",
+      "name": "Cache triage results",
+      "summary": "Stores results in the per-account triage cache, trimming to the newest 5000.",
+      "tags": [
+        "triage",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/triage_cache.dart",
+      "lineRange": [
+        36,
+        47
+      ]
+    },
+    {
+      "id": "step:sort-inboxes:report-progress",
+      "type": "step",
+      "name": "Report progress",
+      "summary": "Updates sorting progress and handles AI errors with a toast.",
+      "tags": [
+        "triage",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1437,
+        1490
+      ]
+    },
+    {
+      "id": "flow:catch-me-up",
+      "type": "flow",
+      "name": "Catch Me Up Digest",
+      "summary": "Streams a Markdown briefing of up to 30 unread inbox emails.",
+      "tags": [
+        "digest",
+        "summary"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "User clicks 'Catch me up'",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:catch-me-up:pick-unread",
+      "type": "step",
+      "name": "Pick unread mail",
+      "summary": "Picks up to 30 unread inbox messages for the briefing.",
+      "tags": [
+        "digest",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/home_page.dart",
+      "lineRange": [
+        64,
+        94
+      ]
+    },
+    {
+      "id": "step:catch-me-up:stream-digest",
+      "type": "step",
+      "name": "Stream digest",
+      "summary": "Streams a Markdown briefing grouped by importance from the local model.",
+      "tags": [
+        "digest",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        84,
+        102
+      ]
+    },
+    {
+      "id": "domain:search",
+      "type": "domain",
+      "name": "Search",
+      "summary": "Finds mail across accounts using three cooperating strategies: server-side keyword search, AI natural-language planning and re-ranking, and a local semantic vector index. Results can be answered by the AI ('Ask AI').",
+      "tags": [
+        "search",
+        "semantic",
+        "embeddings",
+        "ai"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entities": [
+          "SearchPlan",
+          "VectorIndex",
+          "EmailContent",
+          "MimeMessage"
+        ],
+        "businessRules": [
+          "Keyword search lists exact matches first, then up to 10 related semantic matches scoring at least 0.4",
+          "AI search widens by dropping keywords when nothing matches",
+          "AI results fuse server and semantic matches with reciprocal rank fusion before the model re-ranks the top 30",
+          "Vectors are truncated to 512 dimensions and L2-normalized; the index is per account and per embedding model"
+        ],
+        "crossDomainInteractions": [
+          "Uses the EmailAi facade from AI Triage & Smart Inbox to plan, rank and answer",
+          "Uses MailService (Accounts & Mail Sync) for server searches",
+          "New mail from Accounts & Mail Sync is embedded into the index"
+        ]
+      }
+    },
+    {
+      "id": "flow:keyword-search",
+      "type": "flow",
+      "name": "Keyword Search",
+      "summary": "Runs a server-side keyword search and appends closely related semantic matches.",
+      "tags": [
+        "keyword",
+        "imap"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "User types in the search bar with AI off",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:keyword-search:choose-search-targets",
+      "type": "step",
+      "name": "Choose search targets",
+      "summary": "Searches the open folder or each account's All Mail folder.",
+      "tags": [
+        "keyword",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1518,
+        1528
+      ]
+    },
+    {
+      "id": "step:keyword-search:build-keyword-plan",
+      "type": "step",
+      "name": "Build keyword plan",
+      "summary": "Builds a SearchPlan from the query words.",
+      "tags": [
+        "keyword",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1540,
+        1641
+      ]
+    },
+    {
+      "id": "step:keyword-search:server-search",
+      "type": "step",
+      "name": "Run server search",
+      "summary": "Runs IMAP SEARCH (or Gmail raw search) per account.",
+      "tags": [
+        "keyword",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/mail_service.dart",
+      "lineRange": [
+        212,
+        237
+      ]
+    },
+    {
+      "id": "step:keyword-search:semantic-matches",
+      "type": "step",
+      "name": "Find semantic matches",
+      "summary": "Embeds the query and scores the local vector index in parallel.",
+      "tags": [
+        "keyword",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1378,
+        1425
+      ]
+    },
+    {
+      "id": "step:keyword-search:merge-results",
+      "type": "step",
+      "name": "Merge results",
+      "summary": "Lists keyword matches first, then up to 10 related matches by meaning.",
+      "tags": [
+        "keyword",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1540,
+        1641
+      ]
+    },
+    {
+      "id": "flow:ai-natural-language-search",
+      "type": "flow",
+      "name": "AI Natural-Language Search",
+      "summary": "Turns a question into structured filters, searches, fuses with semantic matches and re-ranks with the local model.",
+      "tags": [
+        "ai",
+        "nl-search",
+        "ranking"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "User asks a question with AI search on",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:ai-natural-language-search:plan-search",
+      "type": "step",
+      "name": "Plan search with AI",
+      "summary": "Converts the question into a SearchPlan (sender, dates, keywords, flags).",
+      "tags": [
+        "ai",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        245,
+        273
+      ]
+    },
+    {
+      "id": "step:ai-natural-language-search:translate-plan",
+      "type": "step",
+      "name": "Translate plan to server query",
+      "summary": "Converts the plan into IMAP SEARCH criteria or Gmail syntax.",
+      "tags": [
+        "ai",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/models/search_plan.dart",
+      "lineRange": [
+        93,
+        129
+      ]
+    },
+    {
+      "id": "step:ai-natural-language-search:run-and-widen",
+      "type": "step",
+      "name": "Run and widen",
+      "summary": "Runs the search per account and drops keywords if nothing matched.",
+      "tags": [
+        "ai",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1540,
+        1641
+      ]
+    },
+    {
+      "id": "step:ai-natural-language-search:fuse-semantic",
+      "type": "step",
+      "name": "Fuse with semantic matches",
+      "summary": "Combines server and semantic matches with reciprocal rank fusion.",
+      "tags": [
+        "ai",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1540,
+        1641
+      ]
+    },
+    {
+      "id": "step:ai-natural-language-search:rank-results",
+      "type": "step",
+      "name": "Re-rank with AI",
+      "summary": "Asks the model to order the top 30 candidates by relevance.",
+      "tags": [
+        "ai",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        277,
+        302
+      ]
+    },
+    {
+      "id": "step:ai-natural-language-search:answer-question",
+      "type": "step",
+      "name": "Answer from results",
+      "summary": "Optionally streams a short answer from the top 6 results ('Ask AI').",
+      "tags": [
+        "ai",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/message_list.dart",
+      "lineRange": [
+        310,
+        340
+      ]
+    },
+    {
+      "id": "flow:semantic-indexing",
+      "type": "flow",
+      "name": "Build Semantic Index",
+      "summary": "Embeds mail into a per-account local vector index in the background.",
+      "tags": [
+        "embeddings",
+        "background",
+        "index"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "New mail arrives, startup, or user rebuilds the index",
+        "entryType": "event"
+      }
+    },
+    {
+      "id": "step:semantic-indexing:coalesce-indexing",
+      "type": "step",
+      "name": "Start background indexing",
+      "summary": "Indexes every connected account, coalescing overlapping requests.",
+      "tags": [
+        "embeddings",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1263,
+        1282
+      ]
+    },
+    {
+      "id": "step:semantic-indexing:open-vector-index",
+      "type": "step",
+      "name": "Open vector index",
+      "summary": "Lazily opens the account's index file for the current embedding model.",
+      "tags": [
+        "embeddings",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/vector_index.dart",
+      "lineRange": [
+        173,
+        223
+      ]
+    },
+    {
+      "id": "step:semantic-indexing:walk-folders",
+      "type": "step",
+      "name": "Walk All Mail and Sent",
+      "summary": "Pages back through All Mail and Sent to find unindexed messages.",
+      "tags": [
+        "embeddings",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1317,
+        1366
+      ]
+    },
+    {
+      "id": "step:semantic-indexing:embed-chunks",
+      "type": "step",
+      "name": "Embed in chunks",
+      "summary": "Embeds unindexed messages in chunks of 16 through Ollama /api/embed.",
+      "tags": [
+        "embeddings",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1292,
+        1315
+      ]
+    },
+    {
+      "id": "step:semantic-indexing:add-vectors",
+      "type": "step",
+      "name": "Add normalized vectors",
+      "summary": "Truncates and normalizes each vector and stores it.",
+      "tags": [
+        "embeddings",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/vector_index.dart",
+      "lineRange": [
+        77,
+        89
+      ]
+    },
+    {
+      "id": "step:semantic-indexing:save-index",
+      "type": "step",
+      "name": "Save index",
+      "summary": "Evicts the oldest entries beyond the limit and writes the binary file.",
+      "tags": [
+        "embeddings",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/vector_index.dart",
+      "lineRange": [
+        134,
+        171
+      ]
+    },
+    {
+      "id": "domain:reading-ai-assistance",
+      "type": "domain",
+      "name": "Reading & AI Assistance",
+      "summary": "Renders emails safely and adds local AI help on the open message: summaries, quick replies, translation, calendar event extraction and phishing warnings.",
+      "tags": [
+        "reading",
+        "ai",
+        "security",
+        "html"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entities": [
+          "EmailDocument",
+          "EmailContent",
+          "EmailEvent",
+          "TriageResult",
+          "LanguageGuess"
+        ],
+        "businessRules": [
+          "Email HTML is sanitized with a strict Content-Security-Policy; only a nonce-authorized fit script runs",
+          "Remote images are blocked by default",
+          "Translation is offered only when the detected language differs from the user's",
+          "A sender is flagged suspicious when the display name impersonates another address, or when the AI triage marks it suspicious"
+        ],
+        "crossDomainInteractions": [
+          "Uses EmailAi from AI Triage & Smart Inbox",
+          "Quick replies open the composer in Composing & Sending",
+          "Shows unsubscribe and snooze controls from Local Organization"
+        ]
+      }
+    },
+    {
+      "id": "flow:render-email-safely",
+      "type": "flow",
+      "name": "Render Email Safely",
+      "summary": "Turns a raw HTML or plain-text body into a sandboxed page and shows warnings.",
+      "tags": [
+        "html",
+        "csp",
+        "phishing"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "User opens a message",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:render-email-safely:check-phishing",
+      "type": "step",
+      "name": "Check for phishing",
+      "summary": "Combines the sender-impersonation heuristic with the AI's suspicious flag to show a warning.",
+      "tags": [
+        "html",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/mail_service.dart",
+      "lineRange": [
+        514,
+        530
+      ]
+    },
+    {
+      "id": "step:render-email-safely:sanitize-html",
+      "type": "step",
+      "name": "Sanitize HTML",
+      "summary": "Removes executable/navigating elements, blocks remote images and adds the CSP.",
+      "tags": [
+        "html",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/email_html.dart",
+      "lineRange": [
+        94,
+        158
+      ]
+    },
+    {
+      "id": "step:render-email-safely:fold-quotes",
+      "type": "step",
+      "name": "Fold quoted history",
+      "summary": "Collapses quoted replies from common mail clients.",
+      "tags": [
+        "html",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/email_html.dart",
+      "lineRange": [
+        256,
+        291
+      ]
+    },
+    {
+      "id": "step:render-email-safely:wrap-plain-text",
+      "type": "step",
+      "name": "Wrap plain text",
+      "summary": "Converts plain-text mail into linkified HTML with quote styling.",
+      "tags": [
+        "html",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/email_html.dart",
+      "lineRange": [
+        162,
+        175
+      ]
+    },
+    {
+      "id": "step:render-email-safely:show-web-view",
+      "type": "step",
+      "name": "Show in web view",
+      "summary": "Renders the document in a locked-down platform web view.",
+      "tags": [
+        "html",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/email_web_view.dart",
+      "lineRange": [
+        33,
+        58
+      ]
+    },
+    {
+      "id": "flow:summarize-and-quick-reply",
+      "type": "flow",
+      "name": "Summarize and Quick Reply",
+      "summary": "Streams a summary of the open email and offers three short AI replies.",
+      "tags": [
+        "summary",
+        "quick-reply"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "User clicks Summarize or Quick replies in the AI bar",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:summarize-and-quick-reply:prepare-content",
+      "type": "step",
+      "name": "Prepare email content",
+      "summary": "Converts the message to EmailContent for prompting.",
+      "tags": [
+        "summary",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        682,
+        682
+      ]
+    },
+    {
+      "id": "step:summarize-and-quick-reply:stream-summary",
+      "type": "step",
+      "name": "Stream summary",
+      "summary": "Streams a Markdown summary with TL;DR and action items.",
+      "tags": [
+        "summary",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        72,
+        81
+      ]
+    },
+    {
+      "id": "step:summarize-and-quick-reply:suggest-quick-replies",
+      "type": "step",
+      "name": "Suggest quick replies",
+      "summary": "Asks the fast model for exactly three short replies as JSON.",
+      "tags": [
+        "summary",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        107,
+        129
+      ]
+    },
+    {
+      "id": "step:summarize-and-quick-reply:open-reply-draft",
+      "type": "step",
+      "name": "Open reply with AI draft",
+      "summary": "Clicking a reply opens the composer, which drafts a full reply from it.",
+      "tags": [
+        "summary",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/message_view.dart",
+      "lineRange": [
+        20,
+        30
+      ]
+    },
+    {
+      "id": "flow:translate-email",
+      "type": "flow",
+      "name": "Translate Email",
+      "summary": "Detects the email's language and streams a translation into the user's language.",
+      "tags": [
+        "translation",
+        "language"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "Opening a message in a foreign language, then clicking Translate",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:translate-email:detect-language",
+      "type": "step",
+      "name": "Detect language",
+      "summary": "Uses a fast offline script-based guess, falling back to the model.",
+      "tags": [
+        "translation",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        323,
+        342
+      ]
+    },
+    {
+      "id": "step:translate-email:stream-translation",
+      "type": "step",
+      "name": "Stream translation",
+      "summary": "Streams the subject and body translation with the translation model.",
+      "tags": [
+        "translation",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/message_view.dart",
+      "lineRange": [
+        287,
+        318
+      ]
+    },
+    {
+      "id": "flow:add-event-to-calendar",
+      "type": "flow",
+      "name": "Add Event to Calendar",
+      "summary": "Extracts the main event from an email and opens it as an .ics file.",
+      "tags": [
+        "calendar",
+        "ics"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "User clicks 'Add to calendar'",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:add-event-to-calendar:extract-event",
+      "type": "step",
+      "name": "Extract event",
+      "summary": "Has the model find the most important event, meeting, flight or deadline.",
+      "tags": [
+        "calendar",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        378,
+        409
+      ]
+    },
+    {
+      "id": "step:add-event-to-calendar:serialize-ics",
+      "type": "step",
+      "name": "Serialize to iCalendar",
+      "summary": "Serializes the event as an RFC 5545 VEVENT.",
+      "tags": [
+        "calendar",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        441,
+        463
+      ]
+    },
+    {
+      "id": "step:add-event-to-calendar:write-and-open-ics",
+      "type": "step",
+      "name": "Write and open .ics",
+      "summary": "Writes the .ics file and opens it in the calendar app.",
+      "tags": [
+        "calendar",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1244,
+        1250
+      ]
+    },
+    {
+      "id": "domain:composing-sending",
+      "type": "domain",
+      "name": "Composing & Sending",
+      "summary": "Writes and sends mail with local AI help (drafts, rewrites, subjects), an undo-send window, scheduled 'Send later' delivery, drafts and follow-up reminders when nobody replies.",
+      "tags": [
+        "compose",
+        "smtp",
+        "ai-writing",
+        "scheduling"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entities": [
+          "OutgoingMail",
+          "ScheduledMail",
+          "FollowUp",
+          "RewriteStyle",
+          "Contact"
+        ],
+        "businessRules": [
+          "Every recipient address must be valid and at least one recipient is required",
+          "Sends wait for the undo-send delay; undo reopens the composer",
+          "Scheduled mail is only sent while the app is running; attachments are copied to an outbox",
+          "A failed scheduled send is put back and retried on the next 30-second tick",
+          "A follow-up reminder is cleared when a reply referencing the sent message arrives"
+        ],
+        "crossDomainInteractions": [
+          "Sends through MailService from Accounts & Mail Sync",
+          "Uses EmailAi writing features from AI Triage & Smart Inbox",
+          "Stores scheduled mail, follow-ups and contacts in Local Organization's UserData"
+        ]
+      }
+    },
+    {
+      "id": "flow:ai-assisted-compose",
+      "type": "flow",
+      "name": "AI-Assisted Compose",
+      "summary": "Writes or reworks an email with the local writing model.",
+      "tags": [
+        "ai-writing",
+        "draft"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "User uses the AI writer or AI toolbar in the composer",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:ai-assisted-compose:prefill-composer",
+      "type": "step",
+      "name": "Prefill composer",
+      "summary": "Prefills fields for new, reply, reply-all, forward, follow-up or a restored undo.",
+      "tags": [
+        "ai-writing",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/compose_page.dart",
+      "lineRange": [
+        85,
+        155
+      ]
+    },
+    {
+      "id": "step:ai-assisted-compose:run-ai-writing",
+      "type": "step",
+      "name": "Run AI writing action",
+      "summary": "Generic driver that saves the current text and streams the AI result into the body.",
+      "tags": [
+        "ai-writing",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/compose_page.dart",
+      "lineRange": [
+        194,
+        218
+      ]
+    },
+    {
+      "id": "step:ai-assisted-compose:generate-text",
+      "type": "step",
+      "name": "Generate draft text",
+      "summary": "Streams a reply draft, new email from notes, rewrite or custom edit in the user's voice.",
+      "tags": [
+        "ai-writing",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        133,
+        169
+      ]
+    },
+    {
+      "id": "step:ai-assisted-compose:clean-draft",
+      "type": "step",
+      "name": "Clean draft",
+      "summary": "Strips code fences and 'Here is\u2026' preambles from model output.",
+      "tags": [
+        "ai-writing",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        415,
+        421
+      ]
+    },
+    {
+      "id": "step:ai-assisted-compose:suggest-subject",
+      "type": "step",
+      "name": "Suggest subject",
+      "summary": "Generates a short subject line from the body.",
+      "tags": [
+        "ai-writing",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/ai/email_ai.dart",
+      "lineRange": [
+        171,
+        179
+      ]
+    },
+    {
+      "id": "flow:send-with-undo",
+      "type": "flow",
+      "name": "Send with Undo",
+      "summary": "Validates and sends a message after an undo-send delay.",
+      "tags": [
+        "send",
+        "undo",
+        "smtp"
+      ],
+      "complexity": "complex",
+      "domainMeta": {
+        "entryPoint": "User clicks Send or presses Cmd+Enter",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:send-with-undo:validate-recipients",
+      "type": "step",
+      "name": "Validate recipients",
+      "summary": "Requires a recipient and checks all To/Cc/Bcc addresses.",
+      "tags": [
+        "send",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/compose_page.dart",
+      "lineRange": [
+        283,
+        301
+      ]
+    },
+    {
+      "id": "step:send-with-undo:build-final-body",
+      "type": "step",
+      "name": "Build final body",
+      "summary": "Appends the signature and quoted history to the body.",
+      "tags": [
+        "send",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/compose_page.dart",
+      "lineRange": [
+        259,
+        281
+      ]
+    },
+    {
+      "id": "step:send-with-undo:queue-with-undo",
+      "type": "step",
+      "name": "Queue with undo window",
+      "summary": "Holds the mail for the undo delay and shows an Undo toast.",
+      "tags": [
+        "send",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        774,
+        799
+      ]
+    },
+    {
+      "id": "step:send-with-undo:build-mime",
+      "type": "step",
+      "name": "Build MIME message",
+      "summary": "Renders Markdown to HTML/plain, adds reply threading and attachments.",
+      "tags": [
+        "send",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/mail_service.dart",
+      "lineRange": [
+        324,
+        366
+      ]
+    },
+    {
+      "id": "step:send-with-undo:send-smtp",
+      "type": "step",
+      "name": "Send via SMTP",
+      "summary": "Sends the message and saves it to Sent.",
+      "tags": [
+        "send",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/mail_service.dart",
+      "lineRange": [
+        369,
+        380
+      ]
+    },
+    {
+      "id": "step:send-with-undo:after-sent",
+      "type": "step",
+      "name": "Learn contacts and set follow-up",
+      "summary": "Learns recipients for autocomplete and records a follow-up reminder if requested.",
+      "tags": [
+        "send",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        829,
+        844
+      ]
+    },
+    {
+      "id": "flow:send-later",
+      "type": "flow",
+      "name": "Send Later",
+      "summary": "Schedules a message and sends it when due during housekeeping.",
+      "tags": [
+        "scheduling",
+        "send-later"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "User picks a 'Send later' time; delivered by the 30-second tick",
+        "entryType": "cron"
+      }
+    },
+    {
+      "id": "step:send-later:pick-send-time",
+      "type": "step",
+      "name": "Pick send time",
+      "summary": "Shows the Send later dialog with preset times.",
+      "tags": [
+        "scheduling",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/compose_page.dart",
+      "lineRange": [
+        341,
+        372
+      ]
+    },
+    {
+      "id": "step:send-later:schedule-mail",
+      "type": "step",
+      "name": "Queue scheduled mail",
+      "summary": "Copies attachments to an outbox and stores the ScheduledMail.",
+      "tags": [
+        "scheduling",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        846,
+        875
+      ]
+    },
+    {
+      "id": "step:send-later:tick-due-mail",
+      "type": "step",
+      "name": "Find due mail",
+      "summary": "The 30-second tick finds scheduled messages whose time has come.",
+      "tags": [
+        "scheduling",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        947,
+        979
+      ]
+    },
+    {
+      "id": "step:send-later:send-scheduled",
+      "type": "step",
+      "name": "Send scheduled mail",
+      "summary": "Builds and sends the mail, cleaning up attachments, or puts it back on failure.",
+      "tags": [
+        "scheduling",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        890,
+        922
+      ]
+    },
+    {
+      "id": "flow:follow-up-reminders",
+      "type": "flow",
+      "name": "Follow-Up Reminders",
+      "summary": "Tracks sent mail that needs an answer and clears it when a reply arrives.",
+      "tags": [
+        "follow-up",
+        "reminders"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "Follow-up chosen in composer; checked every 30 seconds",
+        "entryType": "cron"
+      }
+    },
+    {
+      "id": "step:follow-up-reminders:choose-follow-up",
+      "type": "step",
+      "name": "Choose follow-up delay",
+      "summary": "User picks a follow-up delay in days in the composer.",
+      "tags": [
+        "follow-up",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/compose_page.dart",
+      "lineRange": [
+        474,
+        663
+      ]
+    },
+    {
+      "id": "step:follow-up-reminders:record-follow-up",
+      "type": "step",
+      "name": "Record follow-up",
+      "summary": "After sending, stores a FollowUp keyed by Message-ID.",
+      "tags": [
+        "follow-up",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        829,
+        844
+      ]
+    },
+    {
+      "id": "step:follow-up-reminders:clear-on-reply",
+      "type": "step",
+      "name": "Clear on reply",
+      "summary": "The tick removes follow-ups once an inbox message references them.",
+      "tags": [
+        "follow-up",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        947,
+        979
+      ]
+    },
+    {
+      "id": "step:follow-up-reminders:dismiss-follow-up",
+      "type": "step",
+      "name": "Dismiss manually",
+      "summary": "User can dismiss a follow-up without waiting.",
+      "tags": [
+        "follow-up",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1156,
+        1160
+      ]
+    },
+    {
+      "id": "domain:local-organization",
+      "type": "domain",
+      "name": "Local Organization",
+      "summary": "Keeps the user's personal mail organization on the device: Remind-me snoozes, VIPs, blocked senders, muted threads, contacts and one-click unsubscribe.",
+      "tags": [
+        "organization",
+        "snooze",
+        "rules",
+        "user-data"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entities": [
+          "UserData",
+          "Snooze",
+          "Contact",
+          "FollowUp",
+          "ScheduledMail",
+          "UnsubscribeInfo"
+        ],
+        "businessRules": [
+          "All organization data is local to this computer and persisted as one JSON blob",
+          "Snoozed messages are hidden from the inbox until due, then brought back unread on top",
+          "Blocked senders (exact address or @domain) go to Junk",
+          "Muted threads are marked read and archived unless flagged",
+          "VIP mail always shows"
+        ],
+        "crossDomainInteractions": [
+          "Rules run on every fetch from Accounts & Mail Sync",
+          "Snooze and unsubscribe controls are shown in Reading & AI Assistance",
+          "Stores Composing & Sending's scheduled mail and follow-ups"
+        ]
+      }
+    },
+    {
+      "id": "flow:remind-me-snooze",
+      "type": "flow",
+      "name": "Remind Me (Snooze)",
+      "summary": "Hides a message until a chosen time, then brings it back to the inbox.",
+      "tags": [
+        "snooze",
+        "reminders"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "User picks a 'Remind me' time; resurfaced by the 30-second tick",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:remind-me-snooze:pick-remind-time",
+      "type": "step",
+      "name": "Pick remind time",
+      "summary": "Offers presets or a custom date and time.",
+      "tags": [
+        "snooze",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/message_view.dart",
+      "lineRange": [
+        37,
+        65
+      ]
+    },
+    {
+      "id": "step:remind-me-snooze:store-snooze",
+      "type": "step",
+      "name": "Store snooze",
+      "summary": "Saves a Snooze keyed by the message and hides it from the inbox.",
+      "tags": [
+        "snooze",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1016,
+        1035
+      ]
+    },
+    {
+      "id": "step:remind-me-snooze:check-due-snoozes",
+      "type": "step",
+      "name": "Check due snoozes",
+      "summary": "The 30-second tick finds snoozes that are due.",
+      "tags": [
+        "snooze",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        947,
+        979
+      ]
+    },
+    {
+      "id": "step:remind-me-snooze:bring-back",
+      "type": "step",
+      "name": "Bring message back",
+      "summary": "Fetches the message if needed, marks it unread and shows a reminder toast.",
+      "tags": [
+        "snooze",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        985,
+        1012
+      ]
+    },
+    {
+      "id": "flow:block-and-mute-rules",
+      "type": "flow",
+      "name": "Block and Mute Rules",
+      "summary": "Applies blocked-sender and muted-thread rules to incoming mail.",
+      "tags": [
+        "block",
+        "mute",
+        "rules"
+      ],
+      "complexity": "moderate",
+      "domainMeta": {
+        "entryPoint": "User blocks a sender or mutes a thread; rules re-run on every fetch",
+        "entryType": "event"
+      }
+    },
+    {
+      "id": "step:block-and-mute-rules:block-or-mute",
+      "type": "step",
+      "name": "Block sender or mute thread",
+      "summary": "Adds a sender to the block list or toggles muting for a thread.",
+      "tags": [
+        "block",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1064,
+        1095
+      ]
+    },
+    {
+      "id": "step:block-and-mute-rules:check-blocked",
+      "type": "step",
+      "name": "Check blocked sender",
+      "summary": "Matches the sender by exact address or @domain.",
+      "tags": [
+        "block",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/user_data.dart",
+      "lineRange": [
+        200,
+        204
+      ]
+    },
+    {
+      "id": "step:block-and-mute-rules:apply-rules",
+      "type": "step",
+      "name": "Apply rules to inbox",
+      "summary": "Moves blocked mail to Junk and marks muted threads read and archives them.",
+      "tags": [
+        "block",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1111,
+        1138
+      ]
+    },
+    {
+      "id": "flow:unsubscribe-from-list",
+      "type": "flow",
+      "name": "Unsubscribe from Mailing List",
+      "summary": "Leaves a mailing list through its List-Unsubscribe headers.",
+      "tags": [
+        "unsubscribe",
+        "rfc8058"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "User clicks Unsubscribe in the reader",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:unsubscribe-from-list:parse-unsubscribe",
+      "type": "step",
+      "name": "Parse List-Unsubscribe",
+      "summary": "Finds the http(s) and mailto unsubscribe targets and one-click support.",
+      "tags": [
+        "unsubscribe",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/services/mail_service.dart",
+      "lineRange": [
+        488,
+        505
+      ]
+    },
+    {
+      "id": "step:unsubscribe-from-list:confirm-unsubscribe",
+      "type": "step",
+      "name": "Confirm with user",
+      "summary": "Asks for confirmation in the reader.",
+      "tags": [
+        "unsubscribe",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/ui/message_view.dart",
+      "lineRange": [
+        359,
+        380
+      ]
+    },
+    {
+      "id": "step:unsubscribe-from-list:perform-unsubscribe",
+      "type": "step",
+      "name": "Perform unsubscribe",
+      "summary": "Uses one-click POST, else sends an unsubscribe email, else opens the web page.",
+      "tags": [
+        "unsubscribe",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1164,
+        1187
+      ]
+    },
+    {
+      "id": "flow:vip-senders",
+      "type": "flow",
+      "name": "Mark VIP Senders",
+      "summary": "Keeps a local VIP list whose mail always shows in its own view.",
+      "tags": [
+        "vip"
+      ],
+      "complexity": "simple",
+      "domainMeta": {
+        "entryPoint": "User toggles the VIP star next to a sender",
+        "entryType": "manual"
+      }
+    },
+    {
+      "id": "step:vip-senders:toggle-vip",
+      "type": "step",
+      "name": "Toggle VIP",
+      "summary": "Adds or removes the sender from the VIP list and saves.",
+      "tags": [
+        "vip",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        1055,
+        1061
+      ]
+    },
+    {
+      "id": "step:vip-senders:show-vip-view",
+      "type": "step",
+      "name": "Show VIP view",
+      "summary": "The VIP view lists inbox mail from VIP senders.",
+      "tags": [
+        "vip",
+        "step"
+      ],
+      "complexity": "simple",
+      "filePath": "lib/state/app_state.dart",
+      "lineRange": [
+        533,
+        555
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "domain:accounts-and-mail-sync",
+      "target": "flow:add-account-with-oauth",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:add-account-with-oauth",
+      "target": "step:add-account-with-oauth:save-oauth-client",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.17
+    },
+    {
+      "source": "flow:add-account-with-oauth",
+      "target": "step:add-account-with-oauth:run-browser-pkce-sign-in",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.33
+    },
+    {
+      "source": "flow:add-account-with-oauth",
+      "target": "step:add-account-with-oauth:read-identity-claims",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:add-account-with-oauth",
+      "target": "step:add-account-with-oauth:verify-connection",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.67
+    },
+    {
+      "source": "flow:add-account-with-oauth",
+      "target": "step:add-account-with-oauth:store-token-and-account",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.83
+    },
+    {
+      "source": "flow:add-account-with-oauth",
+      "target": "step:add-account-with-oauth:connect-new-account",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:accounts-and-mail-sync",
+      "target": "flow:add-account-with-app-password",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:add-account-with-app-password",
+      "target": "step:add-account-with-app-password:match-provider-preset",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:add-account-with-app-password",
+      "target": "step:add-account-with-app-password:discover-servers",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.4
+    },
+    {
+      "source": "flow:add-account-with-app-password",
+      "target": "step:add-account-with-app-password:validate-and-test",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "flow:add-account-with-app-password",
+      "target": "step:add-account-with-app-password:store-password",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:add-account-with-app-password",
+      "target": "step:add-account-with-app-password:add-and-connect",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:accounts-and-mail-sync",
+      "target": "flow:connect-and-load-inbox",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:connect-and-load-inbox",
+      "target": "step:connect-and-load-inbox:app-startup",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.17
+    },
+    {
+      "source": "flow:connect-and-load-inbox",
+      "target": "step:connect-and-load-inbox:load-credentials",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.33
+    },
+    {
+      "source": "flow:connect-and-load-inbox",
+      "target": "step:connect-and-load-inbox:connect-imap",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:connect-and-load-inbox",
+      "target": "step:connect-and-load-inbox:list-mailboxes",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.67
+    },
+    {
+      "source": "flow:connect-and-load-inbox",
+      "target": "step:connect-and-load-inbox:fetch-first-page",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.83
+    },
+    {
+      "source": "flow:connect-and-load-inbox",
+      "target": "step:connect-and-load-inbox:run-post-fetch-pipeline",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:accounts-and-mail-sync",
+      "target": "flow:refresh-inbox",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:refresh-inbox",
+      "target": "step:refresh-inbox:fetch-latest-pages",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.25
+    },
+    {
+      "source": "flow:refresh-inbox",
+      "target": "step:refresh-inbox:prepend-new-messages",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:refresh-inbox",
+      "target": "step:refresh-inbox:process-new-mail",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.75
+    },
+    {
+      "source": "flow:refresh-inbox",
+      "target": "step:refresh-inbox:trigger-ai-sorting",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:accounts-and-mail-sync",
+      "target": "flow:open-message-and-act",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:open-message-and-act",
+      "target": "step:open-message-and-act:select-message",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:open-message-and-act",
+      "target": "step:open-message-and-act:download-full-body",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.4
+    },
+    {
+      "source": "flow:open-message-and-act",
+      "target": "step:open-message-and-act:mark-read",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "flow:open-message-and-act",
+      "target": "step:open-message-and-act:run-message-action",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:open-message-and-act",
+      "target": "step:open-message-and-act:apply-on-server",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:ai-triage-smart-inbox",
+      "target": "flow:configure-local-ai",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:configure-local-ai",
+      "target": "step:configure-local-ai:save-ai-settings",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:configure-local-ai",
+      "target": "step:configure-local-ai:create-provider",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.4
+    },
+    {
+      "source": "flow:configure-local-ai",
+      "target": "step:configure-local-ai:list-installed-models",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "flow:configure-local-ai",
+      "target": "step:configure-local-ai:pick-default-model",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:configure-local-ai",
+      "target": "step:configure-local-ai:build-email-ai",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:ai-triage-smart-inbox",
+      "target": "flow:sort-inboxes",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:sort-inboxes",
+      "target": "step:sort-inboxes:collect-untriaged",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:sort-inboxes",
+      "target": "step:sort-inboxes:convert-to-content",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.4
+    },
+    {
+      "source": "flow:sort-inboxes",
+      "target": "step:sort-inboxes:triage-batch",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "flow:sort-inboxes",
+      "target": "step:sort-inboxes:cache-results",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:sort-inboxes",
+      "target": "step:sort-inboxes:report-progress",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:ai-triage-smart-inbox",
+      "target": "flow:catch-me-up",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:catch-me-up",
+      "target": "step:catch-me-up:pick-unread",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:catch-me-up",
+      "target": "step:catch-me-up:stream-digest",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:search",
+      "target": "flow:keyword-search",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:keyword-search",
+      "target": "step:keyword-search:choose-search-targets",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:keyword-search",
+      "target": "step:keyword-search:build-keyword-plan",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.4
+    },
+    {
+      "source": "flow:keyword-search",
+      "target": "step:keyword-search:server-search",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "flow:keyword-search",
+      "target": "step:keyword-search:semantic-matches",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:keyword-search",
+      "target": "step:keyword-search:merge-results",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:search",
+      "target": "flow:ai-natural-language-search",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:ai-natural-language-search",
+      "target": "step:ai-natural-language-search:plan-search",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.17
+    },
+    {
+      "source": "flow:ai-natural-language-search",
+      "target": "step:ai-natural-language-search:translate-plan",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.33
+    },
+    {
+      "source": "flow:ai-natural-language-search",
+      "target": "step:ai-natural-language-search:run-and-widen",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:ai-natural-language-search",
+      "target": "step:ai-natural-language-search:fuse-semantic",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.67
+    },
+    {
+      "source": "flow:ai-natural-language-search",
+      "target": "step:ai-natural-language-search:rank-results",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.83
+    },
+    {
+      "source": "flow:ai-natural-language-search",
+      "target": "step:ai-natural-language-search:answer-question",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:search",
+      "target": "flow:semantic-indexing",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:semantic-indexing",
+      "target": "step:semantic-indexing:coalesce-indexing",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.17
+    },
+    {
+      "source": "flow:semantic-indexing",
+      "target": "step:semantic-indexing:open-vector-index",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.33
+    },
+    {
+      "source": "flow:semantic-indexing",
+      "target": "step:semantic-indexing:walk-folders",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:semantic-indexing",
+      "target": "step:semantic-indexing:embed-chunks",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.67
+    },
+    {
+      "source": "flow:semantic-indexing",
+      "target": "step:semantic-indexing:add-vectors",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.83
+    },
+    {
+      "source": "flow:semantic-indexing",
+      "target": "step:semantic-indexing:save-index",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:reading-ai-assistance",
+      "target": "flow:render-email-safely",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:render-email-safely",
+      "target": "step:render-email-safely:check-phishing",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:render-email-safely",
+      "target": "step:render-email-safely:sanitize-html",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.4
+    },
+    {
+      "source": "flow:render-email-safely",
+      "target": "step:render-email-safely:fold-quotes",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "flow:render-email-safely",
+      "target": "step:render-email-safely:wrap-plain-text",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:render-email-safely",
+      "target": "step:render-email-safely:show-web-view",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:reading-ai-assistance",
+      "target": "flow:summarize-and-quick-reply",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:summarize-and-quick-reply",
+      "target": "step:summarize-and-quick-reply:prepare-content",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.25
+    },
+    {
+      "source": "flow:summarize-and-quick-reply",
+      "target": "step:summarize-and-quick-reply:stream-summary",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:summarize-and-quick-reply",
+      "target": "step:summarize-and-quick-reply:suggest-quick-replies",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.75
+    },
+    {
+      "source": "flow:summarize-and-quick-reply",
+      "target": "step:summarize-and-quick-reply:open-reply-draft",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:reading-ai-assistance",
+      "target": "flow:translate-email",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:translate-email",
+      "target": "step:translate-email:detect-language",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:translate-email",
+      "target": "step:translate-email:stream-translation",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:reading-ai-assistance",
+      "target": "flow:add-event-to-calendar",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:add-event-to-calendar",
+      "target": "step:add-event-to-calendar:extract-event",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.33
+    },
+    {
+      "source": "flow:add-event-to-calendar",
+      "target": "step:add-event-to-calendar:serialize-ics",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.67
+    },
+    {
+      "source": "flow:add-event-to-calendar",
+      "target": "step:add-event-to-calendar:write-and-open-ics",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:composing-sending",
+      "target": "flow:ai-assisted-compose",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:ai-assisted-compose",
+      "target": "step:ai-assisted-compose:prefill-composer",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.2
+    },
+    {
+      "source": "flow:ai-assisted-compose",
+      "target": "step:ai-assisted-compose:run-ai-writing",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.4
+    },
+    {
+      "source": "flow:ai-assisted-compose",
+      "target": "step:ai-assisted-compose:generate-text",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "flow:ai-assisted-compose",
+      "target": "step:ai-assisted-compose:clean-draft",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "flow:ai-assisted-compose",
+      "target": "step:ai-assisted-compose:suggest-subject",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:composing-sending",
+      "target": "flow:send-with-undo",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:send-with-undo",
+      "target": "step:send-with-undo:validate-recipients",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.17
+    },
+    {
+      "source": "flow:send-with-undo",
+      "target": "step:send-with-undo:build-final-body",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.33
+    },
+    {
+      "source": "flow:send-with-undo",
+      "target": "step:send-with-undo:queue-with-undo",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:send-with-undo",
+      "target": "step:send-with-undo:build-mime",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.67
+    },
+    {
+      "source": "flow:send-with-undo",
+      "target": "step:send-with-undo:send-smtp",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.83
+    },
+    {
+      "source": "flow:send-with-undo",
+      "target": "step:send-with-undo:after-sent",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:composing-sending",
+      "target": "flow:send-later",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:send-later",
+      "target": "step:send-later:pick-send-time",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.25
+    },
+    {
+      "source": "flow:send-later",
+      "target": "step:send-later:schedule-mail",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:send-later",
+      "target": "step:send-later:tick-due-mail",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.75
+    },
+    {
+      "source": "flow:send-later",
+      "target": "step:send-later:send-scheduled",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:composing-sending",
+      "target": "flow:follow-up-reminders",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:follow-up-reminders",
+      "target": "step:follow-up-reminders:choose-follow-up",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.25
+    },
+    {
+      "source": "flow:follow-up-reminders",
+      "target": "step:follow-up-reminders:record-follow-up",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:follow-up-reminders",
+      "target": "step:follow-up-reminders:clear-on-reply",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.75
+    },
+    {
+      "source": "flow:follow-up-reminders",
+      "target": "step:follow-up-reminders:dismiss-follow-up",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:local-organization",
+      "target": "flow:remind-me-snooze",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:remind-me-snooze",
+      "target": "step:remind-me-snooze:pick-remind-time",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.25
+    },
+    {
+      "source": "flow:remind-me-snooze",
+      "target": "step:remind-me-snooze:store-snooze",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:remind-me-snooze",
+      "target": "step:remind-me-snooze:check-due-snoozes",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.75
+    },
+    {
+      "source": "flow:remind-me-snooze",
+      "target": "step:remind-me-snooze:bring-back",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:local-organization",
+      "target": "flow:block-and-mute-rules",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:block-and-mute-rules",
+      "target": "step:block-and-mute-rules:block-or-mute",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.33
+    },
+    {
+      "source": "flow:block-and-mute-rules",
+      "target": "step:block-and-mute-rules:check-blocked",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.67
+    },
+    {
+      "source": "flow:block-and-mute-rules",
+      "target": "step:block-and-mute-rules:apply-rules",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:local-organization",
+      "target": "flow:unsubscribe-from-list",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:unsubscribe-from-list",
+      "target": "step:unsubscribe-from-list:parse-unsubscribe",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.33
+    },
+    {
+      "source": "flow:unsubscribe-from-list",
+      "target": "step:unsubscribe-from-list:confirm-unsubscribe",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.67
+    },
+    {
+      "source": "flow:unsubscribe-from-list",
+      "target": "step:unsubscribe-from-list:perform-unsubscribe",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:local-organization",
+      "target": "flow:vip-senders",
+      "type": "contains_flow",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "flow:vip-senders",
+      "target": "step:vip-senders:toggle-vip",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "flow:vip-senders",
+      "target": "step:vip-senders:show-vip-view",
+      "type": "flow_step",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "domain:accounts-and-mail-sync",
+      "target": "domain:ai-triage-smart-inbox",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "New mail triggers AI inbox sorting when auto-sort is on",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:accounts-and-mail-sync",
+      "target": "domain:search",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Fetched mail is embedded into the semantic index; MailService runs server-side searches",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:accounts-and-mail-sync",
+      "target": "domain:local-organization",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Block and mute rules run on every fetched batch; snoozed mail is resurfaced from the server",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:search",
+      "target": "domain:ai-triage-smart-inbox",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Uses EmailAi to plan, rank and answer searches with the local model",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:reading-ai-assistance",
+      "target": "domain:ai-triage-smart-inbox",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Uses EmailAi for summaries, quick replies, translation and event extraction; shows the triage suspicious flag",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:reading-ai-assistance",
+      "target": "domain:composing-sending",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Quick replies and reply/forward actions open the composer",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:composing-sending",
+      "target": "domain:accounts-and-mail-sync",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Sends through the account's MailService over SMTP",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:composing-sending",
+      "target": "domain:ai-triage-smart-inbox",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Uses EmailAi writing features (drafts, rewrites, subjects)",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:composing-sending",
+      "target": "domain:local-organization",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Stores scheduled mail, follow-ups and learned contacts in UserData",
+      "weight": 0.6
+    },
+    {
+      "source": "domain:reading-ai-assistance",
+      "target": "domain:local-organization",
+      "type": "cross_domain",
+      "direction": "forward",
+      "description": "Reader exposes Remind me, VIP, block and unsubscribe controls",
+      "weight": 0.6
+    }
+  ],
+  "layers": [],
+  "tour": []
+}
