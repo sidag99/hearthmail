@@ -1,7 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+
+import '../mac_style.dart';
 
 /// Renders the small subset of Markdown the AI produces: **bold**,
 /// "- " bullets and blank-line paragraphs.
@@ -87,7 +88,6 @@ class AiStreamView extends StatefulWidget {
 class _AiStreamViewState extends State<AiStreamView> {
   final _buf = StringBuffer();
   StreamSubscription<String>? _sub;
-  bool _done = false;
   String? _error;
 
   @override
@@ -95,13 +95,10 @@ class _AiStreamViewState extends State<AiStreamView> {
     super.initState();
     _sub = widget.start().listen(
       (chunk) => setState(() => _buf.write(chunk)),
-      onError: (Object e) => setState(() {
-        _error = e.toString();
-        _done = true;
-      }),
+      onError: (Object e) => setState(() => _error = e.toString()),
       onDone: () {
         if (!mounted) return;
-        setState(() => _done = true);
+        setState(() {});
         widget.onDone?.call(_buf.toString());
       },
     );
@@ -126,18 +123,8 @@ class _AiStreamViewState extends State<AiStreamView> {
         Text(widget.placeholder, style: theme.textTheme.bodySmall),
       ]);
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      MarkdownText(_buf.toString()),
-      if (_done)
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            icon: const Icon(Icons.copy, size: 14),
-            label: const Text('Copy'),
-            onPressed: () => Clipboard.setData(ClipboardData(text: _buf.toString())),
-          ),
-        ),
-    ]);
+    // Selectable, so any part can be copied with ⌘C.
+    return SelectionArea(child: MarkdownText(_buf.toString()));
   }
 }
 
@@ -153,13 +140,14 @@ class AiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final c = MacColors.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 12),
       decoration: BoxDecoration(
-        color: scheme.primaryContainer.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.25)),
+        color: c.fill.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: c.separator),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -169,7 +157,7 @@ class AiCard extends StatelessWidget {
               style: Theme.of(context)
                   .textTheme
                   .labelLarge
-                  ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
+                  ?.copyWith(color: c.label, fontWeight: FontWeight.w600)),
           const Spacer(),
           ?trailing,
           if (onClose != null)

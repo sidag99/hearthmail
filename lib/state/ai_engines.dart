@@ -166,7 +166,7 @@ class EngineHub {
   }
 
   static String label(String engine, String model) => switch (engine) {
-        AiEngine.local => '$model · Local',
+        AiEngine.local => model.isEmpty ? 'Local AI' : '$model · Local',
         AiEngine.claudeApi => '${prettyClaude(model)} · API',
         AiEngine.openaiApi => '$model · OpenAI API',
         AiEngine.claudeCli => 'Claude Code',

@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
+import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
@@ -13,7 +15,9 @@ import '../services/email_html.dart';
 import '../services/mail_service.dart';
 import '../state/app_state.dart';
 import 'compose_page.dart';
+import 'conversation_view.dart';
 import 'email_web_view.dart';
+import 'invite_card.dart';
 import 'mac_style.dart';
 import 'sidebar.dart';
 import 'widgets/ai_widgets.dart';
@@ -33,6 +37,19 @@ void openReply(BuildContext context, MimeMessage m,
 
 void openForward(BuildContext context, MimeMessage m) {
   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ComposePage(forwardOf: m)));
+}
+
+/// Opens a message from a Drafts folder in the composer to keep writing.
+/// Saving or sending replaces the old draft.
+Future<void> openDraft(BuildContext context, MimeMessage m) async {
+  final state = context.read<AppState>();
+  try {
+    final mail = await state.draftToOutgoing(m);
+    if (!context.mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ComposePage(restore: mail)));
+  } catch (e) {
+    state.toast('Could not open the draft: ${AppState.friendlyError(e)}');
+  }
 }
 
 /// "Remind me" times, like Apple Mail and Gmail offer.
@@ -67,9 +84,12 @@ Future<DateTime?> pickDateTime(BuildContext context, {String help = 'Pick a time
 }
 
 class MessageView extends StatelessWidget {
-  const MessageView({super.key, this.onBack, this.search});
+  const MessageView({super.key, this.onBack, this.search, this.leadingInset = 0});
 
   final VoidCallback? onBack;
+
+  /// Room for the window's traffic lights when this pane is leftmost.
+  final double leadingInset;
 
   /// The search field, shown at the right end of the toolbar (wide windows).
   final Widget? search;
@@ -82,7 +102,7 @@ class MessageView extends StatelessWidget {
     return ColoredBox(
       color: c.window,
       child: Column(children: [
-        SizedBox(height: kToolbarHeight52, child: MessageToolbar(message: m, onBack: onBack, search: search)),
+        SizedBox(height: kToolbarHeight52, child: MessageToolbar(message: m, onBack: onBack, search: search, leadingInset: leadingInset)),
         const Hairline(),
         Expanded(
           child: m == null
@@ -103,7 +123,8 @@ GlobalObjectKey<_MessageBodyState> _bodyKey(MimeMessage m) => GlobalObjectKey<_M
 /// Mail's toolbar: archive, delete, junk · reply, reply all, forward · flag,
 /// remind · ✨ AI · more, then search.
 class MessageToolbar extends StatelessWidget {
-  const MessageToolbar({super.key, required this.message, this.onBack, this.search});
+  const MessageToolbar({super.key, required this.message, this.onBack, this.search, this.leadingInset = 0});
+  final double leadingInset;
   final MimeMessage? message;
   final VoidCallback? onBack;
   final Widget? search;
@@ -113,7 +134,7 @@ class MessageToolbar extends StatelessWidget {
     final state = context.read<AppState>();
     final m = message;
     final c = MacColors.of(context);
-    return LayoutBuilder(builder: (context, box) => _build(context, state, m, c, box.maxWidth));
+    return LayoutBuilder(builder: (context, box) => _build(context, state, m, c, box.maxWidth - leadingInset));
   }
 
   Widget _build(BuildContext context, AppState state, MimeMessage? m, MacColors c, double width) {
@@ -128,6 +149,7 @@ class MessageToolbar extends StatelessWidget {
       final box = bc.findRenderObject() as RenderBox?;
       final at = box?.localToGlobal(Offset(0, box.size.height)) ?? const Offset(400, 60);
       final choice = await showMenu<Object>(
+        popUpAnimationStyle: AnimationStyle.noAnimation,
         context: context,
         position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx + 1, 0),
         items: [
@@ -151,6 +173,7 @@ class MessageToolbar extends StatelessWidget {
     final body = m == null ? null : _bodyKey(m).currentState;
     final aiMenu = ToolbarItem(
       child: PopupMenuButton<String>(
+        popUpAnimationStyle: AnimationStyle.noAnimation,
         tooltip: 'AI Tools',
         enabled: m != null && state.aiReady,
         onSelected: (v) {
@@ -186,6 +209,7 @@ class MessageToolbar extends StatelessWidget {
 
     final more = ToolbarItem(
       child: PopupMenuButton<String>(
+        popUpAnimationStyle: AnimationStyle.noAnimation,
         tooltip: 'More',
         enabled: m != null,
         onSelected: (v) async {
@@ -216,7 +240,7 @@ class MessageToolbar extends StatelessWidget {
           return [
             if (narrow) const PopupMenuItem(value: 'replyAll', height: 32, child: Text('Reply All')),
             if (narrow) const PopupMenuItem(value: 'forward', height: 32, child: Text('Forward')),
-            if (narrow) const PopupMenuItem(value: 'junk', height: 32, child: Text('Move to Junk')),
+            if (narrow) PopupMenuItem(value: 'junk', height: 32, child: Text(m != null && state.isInJunk(m) ? 'Not Junk' : 'Move to Junk')),
             PopupMenuItem(value: 'read', height: 32, child: Text(m?.isSeen == true ? 'Mark as Unread' : 'Mark as Read')),
             if (sender != null)
               PopupMenuItem(
@@ -231,12 +255,17 @@ class MessageToolbar extends StatelessWidget {
     );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: EdgeInsets.only(left: 8 + leadingInset, right: 8),
       child: Row(children: [
         if (onBack != null) ToolButton(icon: CupertinoIcons.chevron_left, tooltip: 'Back', onPressed: onBack),
         ToolButton(icon: CupertinoIcons.archivebox, tooltip: 'Archive (⌃⌘A)', onPressed: on(state.archiveMessage)),
         ToolButton(icon: CupertinoIcons.trash, tooltip: 'Delete (⌘⌫)', onPressed: on(state.deleteMessage)),
-        if (!narrow) ToolButton(icon: CupertinoIcons.xmark_octagon, tooltip: 'Move to Junk (⇧⌘J)', onPressed: on(state.junkMessage)),
+        if (!narrow)
+          ToolButton(
+            icon: m != null && state.isInJunk(m) ? CupertinoIcons.tray_arrow_up : CupertinoIcons.xmark_octagon,
+            tooltip: m != null && state.isInJunk(m) ? 'Not Junk (⇧⌘J)' : 'Move to Junk (⇧⌘J)',
+            onPressed: on(state.junkMessage),
+          ),
         const SizedBox(width: 10),
         ToolButton(icon: CupertinoIcons.arrowshape_turn_up_left, tooltip: 'Reply (⌘R)', onPressed: on((m) => openReply(context, m))),
         if (!narrow)
@@ -280,6 +309,10 @@ class _MessageBody extends StatefulWidget {
 }
 
 class _MessageBodyState extends State<_MessageBody> {
+  final _webKey = GlobalKey<EmailWebViewState>();
+  double _scrollY = 0;
+  double _headerHeight = 0;
+
   bool _showSummary = false;
   bool _loadImages = false;
   Future<List<String>>? _quickReplies;
@@ -576,6 +609,8 @@ class _MessageBodyState extends State<_MessageBody> {
         ]),
       ]),
       const SizedBox(height: 10),
+      if (state.isDraft(m))
+        notice(CupertinoIcons.pencil, 'This is a draft.', color: c.accent, action: 'Edit Draft', onAction: () => openDraft(context, m)),
       if (suspicion != null)
         notice(CupertinoIcons.exclamationmark_shield, 'Be careful: $suspicion Don\'t click links or share passwords or codes.',
             color: const Color(0xFFFF3B30)),
@@ -614,28 +649,69 @@ class _MessageBodyState extends State<_MessageBody> {
       ],
       if (_findingEvent)
         notice(CupertinoIcons.calendar_badge_plus, 'Looking for a date in this message…'),
+      InviteCard(m),
       if (attachments.isNotEmpty) ...[
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 6, children: [
           for (final info in attachments) _AttachmentChip(message: m, info: info),
         ]),
       ],
+      // Earlier messages in this conversation, newest last, like Mail.
+      ConversationHistory(m),
       const SizedBox(height: 10),
     ]);
 
     final bodyBg = isHtml || !dark ? Colors.white : const Color(0xFF1F1F22);
-    return LayoutBuilder(builder: (context, box) {
-      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: box.maxHeight * 0.55),
-          child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: header),
-        ),
-        const Hairline(),
+    // One page, like Mail: the header sits in space left above the email
+    // and slides up as the email scrolls; scrolling over it scrolls the email.
+    final offset = _scrollY.clamp(0.0, _headerHeight);
+    return ClipRect(
+      child: Stack(children: [
         // HTML email is designed for a white page, so it keeps one even in
         // dark mode. Plain text follows the app theme.
-        Expanded(child: ColoredBox(color: bodyBg, child: EmailWebView(html: doc.html, background: bodyBg))),
-      ]);
-    });
+        Positioned.fill(
+          child: ColoredBox(
+            color: bodyBg,
+            child: EmailWebView(
+              key: _webKey,
+              html: doc.html,
+              background: bodyBg,
+              topInset: _headerHeight,
+              onScroll: (y) {
+                if (mounted && (y.clamp(0.0, _headerHeight) != _scrollY.clamp(0.0, _headerHeight))) {
+                  setState(() => _scrollY = y);
+                } else {
+                  _scrollY = y;
+                }
+              },
+            ),
+          ),
+        ),
+        Positioned(
+          top: -offset,
+          left: 0,
+          right: 0,
+          child: Listener(
+            onPointerSignal: (e) {
+              if (e is PointerScrollEvent) _webKey.currentState?.scrollBy(e.scrollDelta.dy);
+            },
+            onPointerPanZoomUpdate: (e) => _webKey.currentState?.scrollBy(-e.localPanDelta.dy),
+            child: _MeasureHeight(
+              onChange: (h) {
+                if (mounted && (h - _headerHeight).abs() > 0.5) setState(() => _headerHeight = h);
+              },
+              child: ColoredBox(
+                color: MacColors.of(context).window,
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: header),
+                  const Hairline(),
+                ]),
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
   }
 
   Widget _quickReplyCard(BuildContext context, MimeMessage m) {
@@ -762,6 +838,7 @@ Future<void> showMessageMenu(BuildContext context, MimeMessage m, Offset at) asy
         child: Row(children: [Icon(icon, size: 18), const SizedBox(width: 12), Text(label)]),
       );
   final choice = await showMenu<String>(
+        popUpAnimationStyle: AnimationStyle.noAnimation,
     context: context,
     position: RelativeRect.fromRect(at & const Size(1, 1), Offset.zero & overlay.size),
     items: [
@@ -776,7 +853,7 @@ Future<void> showMessageMenu(BuildContext context, MimeMessage m, Offset at) asy
       const PopupMenuDivider(),
       item('archive', Icons.archive_outlined, 'Archive'),
       item('move', Icons.drive_file_move_outline, 'Move to…'),
-      item('junk', Icons.report_gmailerrorred, 'Move to Junk'),
+      item('junk', Icons.report_gmailerrorred, state.isInJunk(m) ? 'Not Junk' : 'Move to Junk'),
       item('delete', Icons.delete_outline, 'Delete'),
       const PopupMenuDivider(),
       if (sender != null)
@@ -860,5 +937,34 @@ Future<void> showMessageMenu(BuildContext context, MimeMessage m, Offset at) asy
         ),
       );
       if (ok == true) await state.blockSender(sender!);
+  }
+}
+
+
+/// Reports its child's height after each layout.
+class _MeasureHeight extends SingleChildRenderObjectWidget {
+  const _MeasureHeight({required this.onChange, required super.child});
+  final ValueChanged<double> onChange;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderMeasureHeight(onChange);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderMeasureHeight renderObject) => renderObject.onChange = onChange;
+}
+
+class _RenderMeasureHeight extends RenderProxyBox {
+  _RenderMeasureHeight(this.onChange);
+  ValueChanged<double> onChange;
+  double? _last;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final h = size.height;
+    if (h != _last) {
+      _last = h;
+      WidgetsBinding.instance.addPostFrameCallback((_) => onChange(h));
+    }
   }
 }

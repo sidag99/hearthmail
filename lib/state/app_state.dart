@@ -517,11 +517,26 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       await _loadInbox(s);
       _startWatching(s);
+      unawaited(_refreshFolderCounts(s));
     } catch (e) {
       s.status = ConnectionStatus.failed;
       s.error = friendlyError(e);
       notifyListeners();
     }
+  }
+
+  /// Unread counts of each account's other folders, by mailbox path.
+  final _folderUnread = <String, Map<String, int>>{};
+
+  int folderUnread(AccountSession s, Mailbox b) => _folderUnread[s.id]?[b.path] ?? 0;
+
+  Future<void> _refreshFolderCounts(AccountSession s) async {
+    final service = s.service;
+    if (service == null || !s.connected) return;
+    try {
+      _folderUnread[s.id] = await service.unreadCounts(s.mailboxes);
+      notifyListeners();
+    } catch (_) {}
   }
 
   /// Re-reads the folder list after a folder was created, renamed or deleted.
@@ -780,6 +795,8 @@ class AppState extends ChangeNotifier {
     var all = _viewMessages(view);
     if (_categoryApplies) all = all.where((m) => categoryOf(m) == inboxCategory).toList();
     if (listFilter != ListFilter.all && view.kind != ViewKind.search) all = all.where(_passesFilter).toList();
+    // One row per conversation (newest message), like Mail and Gmail.
+    if (settings.groupConversations && view.kind != ViewKind.search) all = collapseThreads(all);
     if (settings.priorityFirst && view.kind != ViewKind.search) {
       // Mail's "Show Priority Messages": important unread mail on top.
       bool top(MimeMessage m) => !m.isSeen && (isVipMessage(m) || triageOf(m)?.priority == MailPriority.high);
@@ -912,6 +929,7 @@ class AppState extends ChangeNotifier {
           () async {
             try {
               unawaited(_loadSent(s, quiet: quiet));
+              unawaited(_refreshFolderCounts(s));
               final latest = await s.service!.fetchPage(s.inbox!);
               _tag(latest, s, s.inbox!);
               final known = s.inboxMessages.map((m) => m.uid).toSet();
@@ -946,6 +964,16 @@ class AppState extends ChangeNotifier {
 
   EmailContent contentOf(MimeMessage m) => MailService.toContent(m, _box[m]?.path ?? '');
 
+  /// Moves the selection up (-1) or down (+1) the list, like the arrow keys in Mail.
+  void selectAdjacent(int delta) {
+    final list = visibleMessages;
+    if (list.isEmpty) return;
+    final at = selected == null ? -1 : list.indexOf(selected!);
+    final next = at < 0 ? (delta > 0 ? 0 : list.length - 1) : (at + delta).clamp(0, list.length - 1);
+    if (at == next) return;
+    unawaited(openMessage(list[next]));
+  }
+
   Future<void> openMessage(MimeMessage m) async {
     final s = _owner[m];
     final box = _box[m];
@@ -970,12 +998,18 @@ class AppState extends ChangeNotifier {
       }
     }
     final current = selected;
-    if (current != null && !current.isSeen) {
-      try {
-        await service.setSeen(box, current, true);
-        notifyListeners();
-      } catch (_) {}
+    if (current == null || current.isSeen) return;
+    final delay = settings.markReadDelay;
+    if (delay < 0) return; // marked read by hand only
+    if (delay > 0) {
+      await Future<void>.delayed(Duration(seconds: delay));
+      // Only if the user is still reading it.
+      if (!identical(selected, current) || current.isSeen) return;
     }
+    try {
+      await service.setSeen(box, current, true);
+      notifyListeners();
+    } catch (_) {}
   }
 
   void _replaceMessage(MimeMessage old, MimeMessage updated) {
@@ -988,16 +1022,27 @@ class AppState extends ChangeNotifier {
 
   Future<void> toggleRead(MimeMessage m) => _act(m, (svc, box) => svc.setSeen(box, m, !m.isSeen));
   Future<void> toggleFlag(MimeMessage m) => _act(m, (svc, box) => svc.setFlagged(box, m, !m.isFlagged));
-  Future<void> deleteMessage(MimeMessage m) =>
-      _act(m, (svc, box) => svc.delete(box, m), removes: true, done: 'Moved to Trash');
+  Future<void> deleteMessage(MimeMessage m) {
+    final box = _box[m];
+    final forGood = box != null && MailService.isTrash(box);
+    return _act(m, (svc, box) => svc.delete(box, m), removes: true, done: forGood ? 'Deleted' : 'Moved to Trash');
+  }
   Future<void> archiveMessage(MimeMessage m) =>
       _act(m, (svc, box) => svc.archive(box, m), removes: true, done: 'Archived');
-  Future<void> junkMessage(MimeMessage m) =>
-      _act(m, (svc, box) => svc.junk(box, m), removes: true, done: 'Moved to Junk');
+  /// Junk, or "Not Junk" (back to the Inbox) for mail already in Junk.
+  Future<void> junkMessage(MimeMessage m) {
+    final box = _box[m];
+    if (box != null && MailService.isJunk(box)) {
+      return _act(m, (svc, box) => svc.notJunk(box, m), removes: true, done: 'Moved to Inbox');
+    }
+    return _act(m, (svc, box) => svc.junk(box, m), removes: true, done: 'Moved to Junk');
+  }
+
+  bool isInJunk(MimeMessage m) => _box[m] != null && MailService.isJunk(_box[m]!);
   Future<void> moveMessage(MimeMessage m, Mailbox target) =>
       _act(m, (svc, box) => svc.moveTo(box, m, target), removes: true, done: 'Moved to ${target.name}');
 
-  Future<void> _act(MimeMessage m, Future<void> Function(MailService svc, Mailbox box) action,
+  Future<void> _act(MimeMessage m, Future<Object?> Function(MailService svc, Mailbox box) action,
       {bool removes = false, String? done}) async {
     final s = _owner[m];
     final box = _box[m];
@@ -1005,7 +1050,8 @@ class AppState extends ChangeNotifier {
     try {
       final before = visibleMessages;
       final idx = before.indexOf(m);
-      await action(s!.service!, box);
+      final result = await action(s!.service!, box);
+      final undo = result is UndoAction ? result : null;
       if (removes) {
         for (final list in [folderMessages, searchResults, for (final x in sessions) x.inboxMessages]) {
           list.remove(m);
@@ -1017,11 +1063,30 @@ class AppState extends ChangeNotifier {
           if (selected != null) unawaited(openMessage(selected!));
         }
       }
-      if (done != null) toast(done);
+      if (done != null) {
+        showToast(Toast(done,
+            duration: Duration(seconds: undo == null ? 3 : 6),
+            action: undo == null ? null : 'Undo',
+            onAction: undo == null ? null : () => _undo(undo, s, box)));
+      }
     } catch (e) {
       toast(friendlyError(e));
     }
     notifyListeners();
+  }
+
+  /// Puts a moved or deleted message back, then reloads where it was.
+  Future<void> _undo(UndoAction undo, AccountSession s, Mailbox box) async {
+    try {
+      await undo();
+      if (view.kind == ViewKind.folder && folderSession == s && folderBox?.path == box.path) {
+        await openFolder(s, box);
+      } else {
+        await refresh(quiet: true, only: s);
+      }
+    } catch (e) {
+      toast('Could not undo: ${friendlyError(e)}');
+    }
   }
 
   /// The account a new message should come from by default.
@@ -1036,6 +1101,16 @@ class AppState extends ChangeNotifier {
 
   /// Sends [mail]: later if it has a send time, otherwise after the
   /// "Undo send" delay. Returns once it is queued; problems arrive as toasts.
+  /// Sends everything still waiting out its "Undo send" delay, right now.
+  /// Called when the app quits, so nothing is lost.
+  Future<void> flushPendingSends() async {
+    final pending = _pendingSends.keys.toList();
+    for (final mail in pending) {
+      _pendingSends.remove(mail)?.cancel();
+    }
+    await Future.wait([for (final mail in pending) _deliver(mail)]);
+  }
+
   Future<void> sendMail(OutgoingMail mail) async {
     if (mail.sendAt != null) {
       await _schedule(mail);
@@ -1189,7 +1264,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveDraft(OutgoingMail mail) async {
+  /// Saves [mail] to its account's Drafts, replacing the draft it continues.
+  /// Returns the saved copy (null if the server didn't say where it went).
+  Future<MimeMessage?> saveDraft(OutgoingMail mail, {bool quiet = false}) async {
     final service = mail.from.service;
     if (service == null) throw Exception('${mail.from.config.email} is not connected.');
     final message = service.build(
@@ -1201,9 +1278,29 @@ class AppState extends ChangeNotifier {
       inReplyTo: mail.inReplyTo,
       files: mail.files,
     );
-    await service.saveDraft(message);
-    unawaited(_removeReplacedDraft(mail));
-    toast('Draft saved to ${mail.from.config.email}');
+    final saved = await service.saveDraft(message);
+    // Remember the new copy so the next save (or sending) replaces it.
+    MimeMessage? ref;
+    if (saved.uid != null) {
+      ref = message
+        ..uid = saved.uid
+        ..isSeen = true;
+      _owner[ref] = mail.from;
+      _box[ref] = saved.box;
+    }
+    await _removeReplacedDraft(mail);
+    if (!quiet) toast('Draft saved to ${mail.from.config.email}');
+    return ref;
+  }
+
+  /// Deletes a draft the composer saved, when the user discards the message.
+  Future<void> discardDraft(MimeMessage draft) =>
+      _removeReplacedDraft(OutgoingMail(from: _owner[draft] ?? sessions.first, to: '', subject: '', body: '', replacesDraft: draft));
+
+  /// Whether [m] lives in a Drafts folder (so it can be edited).
+  bool isDraft(MimeMessage m) {
+    final box = _box[m];
+    return m.hasFlag(MessageFlags.draft) || (box != null && (box.hasFlag(MailboxFlag.drafts) || box.name.toLowerCase().contains('draft')));
   }
 
   // ------------------------------------------------------------ timers
@@ -1845,8 +1942,7 @@ class AppState extends ChangeNotifier {
 
     try {
       if (!lastSearchWasAi) {
-        final words = searchQuery.split(RegExp(r'\s+'));
-        searchPlan = SearchPlan(keywords: words.length > 4 ? [searchQuery] : words);
+        searchPlan = SearchPlan.parse(searchQuery);
         final exact = await runAll(searchPlan!);
         final seen = {for (final m in exact) keyOf(m)};
         // Keyword matches first, then closely related ones by meaning.

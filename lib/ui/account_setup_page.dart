@@ -7,6 +7,7 @@ import '../models/account_config.dart';
 import '../services/mail_service.dart';
 import '../services/settings_store.dart';
 import '../state/app_state.dart';
+import 'mac_style.dart';
 
 class AccountSetupPage extends StatefulWidget {
   const AccountSetupPage({super.key, this.isFirstRun = false});
@@ -483,7 +484,7 @@ class _AccountSetupPageState extends State<AccountSetupPage> {
     return Scaffold(
       appBar: widget.isFirstRun
           ? null
-          : AppBar(title: const Text('Add account')),
+          : const MacPageBar(title: 'Add Account'),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),

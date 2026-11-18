@@ -1,6 +1,6 @@
 # Hearthmail vs Apple Mail and Gmail
 
-Status as of 17 Nov 2026. ✅ built · 🔜 possible, not built yet · ⚠️ possible with limits · ❌ not possible
+Status as of 18 Nov 2026. ✅ built · 🔜 possible, not built yet · ⚠️ possible with limits · ❌ not possible
 
 ## Reading and organizing
 
@@ -17,23 +17,23 @@ Status as of 17 Nov 2026. ✅ built · 🔜 possible, not built yet · ⚠️ po
 | VIPs (Apple) | ✅ | VIP mail always counts as Priority |
 | Remind me / Snooze (both) | ⚠️ | Stored on this computer; other devices still show the email |
 | Follow-up reminder if no reply (Apple, Gmail nudge) | ✅ | |
-| Flag, read/unread, archive, delete, junk, move (both) | ✅ | |
+| Flag, read/unread, archive, delete, junk / not junk, move (both) | ✅ | Undo after archive, delete, junk and move; delete in Trash erases |
 | Filters: unread, flagged, attachments (Apple) | ✅ | |
 | Mark all as read | ✅ | |
-| Mute conversation (both) | ✅ | New replies archived automatically |
-| Block sender (both) | ✅ | Their mail goes to Junk |
+| Mute conversation (both) | ⚠️ | New replies archived automatically while Hearthmail is open |
+| Block sender (both) | ⚠️ | Their mail goes to Junk while Hearthmail is open |
 | Unsubscribe button (both) | ✅ | One-click (RFC 8058), email or web page |
 | Phishing / scam warning (Gmail) | ✅ | Forged-sender check + AI |
 | Translate email (Gmail, Apple Intelligence) | ✅ | translategemma:4b |
 | Summarize (both) | ✅ | |
 | Add event to Calendar (Apple data detectors) | ✅ | AI finds date and time, Calendar confirms |
 | Swipe to archive/delete on phones (both) | ✅ | |
-| Keyboard shortcuts (both) | ✅ | Apple Mail's: ⌘R, ⇧⌘R, ⇧⌘F, ⌘E, ⌃⌘A, ⌘⌫, ⇧⌘U, ⇧⌘L, ⇧⌘J |
-| Conversation (thread) view (both) | 🔜 | Thread detection exists (used by Mute); stacked view not built |
+| Keyboard shortcuts (both) | ✅ | Apple Mail's: ⌘N, ⌘R, ⇧⌘R, ⇧⌘F, ⌃⌘A, ⌘⌫, Delete, ↑/↓, ⇧⌘U, ⇧⌘L, ⇧⌘J, ⇧⌘N, ⌃⌘S, ⇧⌘D (send), ⌘, |
+| Conversations (both) | ✅ | One row per conversation with a count; earlier messages shown under the open one |
 | Select several emails, act on all | 🔜 | |
-| New-mail notifications | ⚠️🔜 | Possible while the app runs; needs a notification plugin |
+| New-mail notifications, Dock badge | ✅ | Instant (IMAP IDLE) while the app runs |
 | Notifications when the app is closed | ❌ | Needs a server watching your mail 24/7 |
-| Print / save as PDF | 🔜 | |
+| Print / save as PDF | ✅ | |
 | Package tracking card (Gmail) | 🔜 | AI can extract tracking numbers |
 | Sender logos (BIMI, Apple Branded Mail) | 🔜 | |
 | Rules / filters running on the server (Gmail filters, Sieve) | ❌ | Gmail filters aren't reachable over IMAP; local rules (block, mute) work |
@@ -45,16 +45,16 @@ Status as of 17 Nov 2026. ✅ built · 🔜 possible, not built yet · ⚠️ po
 | Write for me, rewrite, tone, grammar (Gmail Help me write, Apple Writing Tools) | ✅ | |
 | Quick replies (both) | ✅ | |
 | Suggested subject | ✅ | |
-| Formatting: bold, lists | ✅ | Markdown, sent as real HTML |
+| Formatting: bold, lists | ✅ | Markdown, sent as real HTML; your line breaks are kept |
 | Write in another language | ✅ | Uses the writing model (better at writing other languages) |
 | Forward with attachments (both) | ✅ | |
 | Attach files (both) | ✅ | |
 | Contact autocomplete (both) | ✅ | Learned from your mail, stays on this computer |
 | Per-account signatures (both) | ✅ | |
 | Templates (Gmail) | ✅ | |
-| Undo send (both) | ✅ | 5–30 seconds |
+| Undo send (both) | ✅ | 5–30 seconds; quitting sends waiting messages instead of dropping them |
 | Send later / schedule (both) | ⚠️ | Sent by this app, so the Mac must be on with the app open (or it sends when opened). Gmail's server-side scheduling isn't reachable over IMAP |
-| Save draft to server (both) | ✅ | Asks when you close an unsent message |
+| Drafts (both) | ✅ | Autosaved every 30 s (replacing the previous copy), Edit Draft to continue, removed after sending |
 | Smart Compose (inline autocomplete while typing) | 🔜 | Possible with a small fast model |
 | Rich text editor (fonts, colors) | 🔜 | Markdown covers bold/lists/links today |
 | Read receipts | ❌ | Not standard email; trackers |
@@ -67,7 +67,7 @@ Status as of 17 Nov 2026. ✅ built · 🔜 possible, not built yet · ⚠️ po
 
 | Feature | Status | Notes |
 |---|---|---|
-| Keyword search (server side, Gmail's own engine on Gmail) | ✅ | |
+| Keyword search (server side, Gmail's own engine on Gmail) | ✅ | All words must match; from:, to:, subject:, has:attachment, is:unread, is:flagged, after:, before:, "phrases" |
 | Natural-language search ("flight to Lisbon in December") | ✅ | AI turns it into filters |
 | Search by meaning (semantic / vector) | ✅ | Local index, see below |
 | Ask your inbox ("when does my flight leave?") | ✅ | |

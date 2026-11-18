@@ -1,5 +1,6 @@
 import '../../models/brief.dart';
 import '../../models/email_content.dart';
+import '../../models/intent.dart';
 import '../../models/search_plan.dart';
 import '../../models/triage.dart';
 import 'ai_provider.dart';
@@ -85,8 +86,9 @@ class EmailAi {
         'Output ONLY the email body text: no subject line, no preamble such as "Here is a draft", no explanations, no code fences.',
         'Sound like a real person: natural, concise, specific. Avoid clichés like "I hope this email finds you well".',
         'Never invent facts, opinions, dates, numbers or commitments, and only say what the user asked to say. If something essential is unknown, leave a short placeholder in square brackets, e.g. [time].',
+        'Never add reasons, excuses, apologies or promises the user did not give.',
         if (_firstName.isNotEmpty)
-          'End with a brief sign-off and the name "$_firstName".'
+          'End with a brief sign-off, then the name "$_firstName" on the next line (e.g. "Best,\n$_firstName"), with no blank line between them.'
         else
           'End with a brief sign-off but no name.',
         'You may use light Markdown (**bold**, "- " bullets) only when it genuinely helps readability.',
@@ -170,6 +172,57 @@ class EmailAi {
       ], model: _writerModel, temperature: 0.6);
 
   // ---------------------------------------------------------------- writing
+
+  /// Proposes what the email could say, as short pickable options. Runs on
+  /// the local model (quick and private); the chosen writer then writes the
+  /// email with [writeFromIntent].
+  Future<IntentOptions> suggestIntents({EmailContent? replyTo, String notes = '', String to = '', String subject = ''}) async {
+    final p = local ?? provider;
+    final model = local != null && writingModel.isNotEmpty ? writingModel : fastModel;
+    final reply = replyTo != null;
+    final json = await p.completeJson([
+      AiMessage.system(
+          'You help ${userName.isEmpty ? 'the user' : userName} decide what to say in an email. Do NOT write the email. '
+          'Propose short options, each 2 to 7 words, written as what the user wants to convey and starting with a verb '
+          '(e.g. "Accept the invitation", "Ask to move it to Friday", "Send the report by Thursday").\n'
+          'goals — ${reply ? '3 or 4 different, mutually exclusive ways to respond to the email (e.g. agree, decline, ask for more time, ask a question).' : '2 or 3 different ways to frame this email.'}\n'
+          'points — 3 to 5 optional specific details worth adding: questions to ask, things to confirm, or useful details '
+          '${reply ? 'from the email' : 'from the notes'}. Never ask about or confirm things the ${reply ? 'email' : 'notes'} already state clearly. '
+          'Never invent facts; put unknowns in brackets, e.g. "Suggest a time [when?]".\n'
+          'tones — 3 tones that suit this situation, 1 to 3 words each (e.g. "Warm", "Brief and direct", "Formal").\n'
+          'Write the options in the same language as ${reply ? 'the email' : 'the notes'}.'),
+      AiMessage.user(reply
+          ? 'The email I am replying to:\n\n${replyTo.forPrompt(maxBodyChars: 4000)}'
+              '${notes.trim().isEmpty ? '' : '\n\nMy rough idea: ${notes.trim()}'}'
+          : '${to.trim().isEmpty ? '' : 'Recipient: $to\n'}${subject.trim().isEmpty ? '' : 'Subject: $subject\n'}'
+              'My notes: ${notes.trim()}'),
+    ], model: model, temperature: 0.4, schema: {
+      'type': 'object',
+      'properties': {
+        'goals': {'type': 'array', 'items': {'type': 'string'}},
+        'points': {'type': 'array', 'items': {'type': 'string'}},
+        'tones': {'type': 'array', 'items': {'type': 'string'}},
+      },
+      'required': ['goals', 'points', 'tones'],
+    });
+    return IntentOptions.fromJson(json);
+  }
+
+  /// Writes the email from the options the user picked.
+  Stream<String> writeFromIntent(IntentChoice choice, {EmailContent? replyTo, String to = '', String subject = ''}) =>
+      _writer.chat([
+        AiMessage.system(_writerRules),
+        AiMessage.user(replyTo != null
+            ? 'Write my reply to the email below. Say only what I chose here, naturally and in full sentences:\n'
+                '${choice.toPrompt()}\n'
+                'Match the formality of the original unless a tone is given. Greet the sender by first name if it is a person. '
+                'Reply in the language of the original email.\n\n'
+                '--- Original email ---\n${replyTo.forPrompt()}'
+            : 'Write an email that says only what I chose here, naturally and in full sentences:\n'
+                '${choice.toPrompt()}\n'
+                '${to.trim().isEmpty ? '' : 'Recipient: $to\n'}'
+                '${subject.trim().isEmpty ? '' : 'Subject: $subject\n'}'),
+      ], model: _writerModel, temperature: 0.6);
 
   /// Turns rough notes or a request into a full email.
   Stream<String> compose(String notes, {String to = '', String subject = ''}) =>

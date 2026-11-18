@@ -13,21 +13,55 @@ import 'package:webview_flutter/webview_flutter.dart';
 /// Where no web engine is available (Windows for now, and tests), falls
 /// back to a simpler built-in renderer.
 class EmailWebView extends StatefulWidget {
-  const EmailWebView({super.key, required this.html, this.background = Colors.white});
+  const EmailWebView({super.key, required this.html, this.background = Colors.white, this.topInset = 0, this.onScroll});
 
   final String html;
   final Color background;
+
+  /// Empty space above the email, where the app lays the message header so
+  /// header and email scroll as one page.
+  final double topInset;
+
+  /// Reports how far the email is scrolled.
+  final ValueChanged<double>? onScroll;
 
   static bool get supported =>
       !kIsWeb && (Platform.isMacOS || Platform.isIOS || Platform.isAndroid) && WebViewPlatform.instance != null;
 
   @override
-  State<EmailWebView> createState() => _EmailWebViewState();
+  State<EmailWebView> createState() => EmailWebViewState();
 }
 
-class _EmailWebViewState extends State<EmailWebView> {
+class EmailWebViewState extends State<EmailWebView> {
   WebViewController? _controller;
   String? _loaded;
+  final _fallbackScroll = ScrollController();
+
+  /// Scrolls the email (used for wheel and trackpad scrolling over the header).
+  void scrollBy(double dy) {
+    final c = _controller;
+    if (c != null) {
+      c.runJavaScript('window.scrollBy(0, $dy)');
+    } else if (_fallbackScroll.hasClients) {
+      final p = _fallbackScroll.position;
+      _fallbackScroll.jumpTo((p.pixels + dy).clamp(0.0, p.maxScrollExtent));
+    }
+  }
+
+  /// Applies the header space and reports scrolling. Runs as the app (not
+  /// the email), so the email's Content-Security-Policy doesn't block it.
+  void _applyInset() => _controller?.runJavaScript(
+        "document.documentElement.style.paddingTop='${widget.topInset.toStringAsFixed(1)}px';"
+        "if(!window.__hmScroll){window.__hmScroll=1;var t=0;"
+        "addEventListener('scroll',function(){if(t)return;t=requestAnimationFrame(function(){t=0;"
+        "HearthmailScroll.postMessage(String(window.scrollY));});},{passive:true});}",
+      );
+
+  @override
+  void dispose() {
+    _fallbackScroll.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -37,7 +71,12 @@ class _EmailWebViewState extends State<EmailWebView> {
         // Needed only for our own fit-to-width script; the email's own
         // scripts are blocked by its Content-Security-Policy.
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..addJavaScriptChannel('HearthmailScroll', onMessageReceived: (m) {
+          final y = double.tryParse(m.message);
+          if (y != null) widget.onScroll?.call(y);
+        })
         ..setNavigationDelegate(NavigationDelegate(
+          onPageFinished: (_) => _applyInset(),
           onNavigationRequest: (req) {
             final url = req.url;
             if (url.startsWith('about:') || url.startsWith('data:')) return NavigationDecision.navigate;
@@ -64,9 +103,11 @@ class _EmailWebViewState extends State<EmailWebView> {
   }
 
   @override
-  void didUpdateWidget(EmailWebView old) {
-    super.didUpdateWidget(old);
+  void didUpdateWidget(EmailWebView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_loaded != widget.html) widget.onScroll?.call(0);
     _load();
+    if (oldWidget.topInset != widget.topInset) _applyInset();
   }
 
   @override
@@ -74,15 +115,22 @@ class _EmailWebViewState extends State<EmailWebView> {
     final c = _controller;
     if (c != null) return WebViewWidget(controller: c);
     // Fallback renderer.
-    return SingleChildScrollView(
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        widget.onScroll?.call(n.metrics.pixels);
+        return false;
+      },
+      child: SingleChildScrollView(
+      controller: _fallbackScroll,
       child: Container(
         color: widget.background,
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        padding: EdgeInsets.fromLTRB(20, 16 + widget.topInset, 20, 24),
         child: HtmlWidget(
           widget.html,
           textStyle: TextStyle(color: widget.background.computeLuminance() > 0.5 ? Colors.black87 : Colors.white, fontSize: 14),
           onTapUrl: (url) => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
         ),
+      ),
       ),
     );
   }

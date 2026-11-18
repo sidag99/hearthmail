@@ -3,19 +3,23 @@ import 'dart:io';
 
 import 'package:enough_mail/enough_mail.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/services.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:intl/intl.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../models/intent.dart';
+import '../services/ai/ai_provider.dart';
 import '../services/ai/email_ai.dart';
+import '../services/ai/engines.dart';
 import '../services/mail_service.dart';
 import '../services/user_data.dart';
 import '../state/app_state.dart';
+import 'compose_ai.dart';
+import 'mac_style.dart';
 import 'message_view.dart' show pickDateTime;
-import 'sidebar.dart';
 
 class ComposePage extends StatefulWidget {
   const ComposePage({
@@ -54,6 +58,7 @@ class _ComposePageState extends State<ComposePage> {
   final _subject = TextEditingController();
   final _body = TextEditingController();
   final _prompt = TextEditingController();
+  final _intentNotes = TextEditingController();
   final _bodyFocus = FocusNode();
   final _fieldFocus = <TextEditingController, FocusNode>{};
 
@@ -69,10 +74,26 @@ class _ComposePageState extends State<ComposePage> {
 
   StreamSubscription<String>? _aiSub;
   String? _aiLabel;
+
+  /// The last AI job, so it can be re-run on another model if it fails.
+  Stream<String> Function(EmailAi ai)? _lastJob;
+  String? _lastLabel;
+
+  /// Why the last AI job failed, and the model to try instead.
+  ({String message, WritingChoice? fallback})? _aiFailure;
+
+  /// "What should it say?" for new messages and replies.
+  bool _showIntent = false;
   String? _undoText;
   String? _replyLanguage;
 
   bool get _generating => _aiSub != null;
+
+  /// The copy of this message last saved to Drafts; the next save (or
+  /// sending) replaces it.
+  MimeMessage? _savedDraft;
+  String? _savedSnapshot;
+  Timer? _autosave;
 
   /// The account this message is sent from.
   AccountSession? _from;
@@ -101,13 +122,18 @@ class _ComposePageState extends State<ComposePage> {
       _showCc = restore.cc.isNotEmpty || restore.bcc.isNotEmpty;
       _followUpDays = restore.followUpDays;
     } else if (r != null) {
-      final me = _from?.config.email.toLowerCase() ?? '';
+      // Every address of mine, so Reply All never includes me.
+      final mine = {for (final x in state.sessions) x.config.email.toLowerCase()};
       final replyTo = (r.replyTo?.isNotEmpty ?? false) ? r.replyTo! : (r.from ?? const <MailAddress>[]);
       _to.text = MailService.addressList(replyTo);
       if (widget.replyAll) {
-        final others = [...?r.to, ...?r.cc]
-            .where((a) => a.email.toLowerCase() != me && !replyTo.any((x) => x.email == a.email))
-            .toList();
+        final seen = {for (final x in replyTo) x.email.toLowerCase()};
+        final others = [
+          // When Reply-To differs from From, the sender still gets it.
+          if (r.replyTo?.isNotEmpty ?? false) ...?r.from,
+          ...?r.to,
+          ...?r.cc,
+        ].where((a) => !mine.contains(a.email.toLowerCase()) && seen.add(a.email.toLowerCase())).toList();
         if (others.isNotEmpty) {
           _cc.text = MailService.addressList(others);
           _showCc = true;
@@ -128,7 +154,7 @@ class _ComposePageState extends State<ComposePage> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _runAi(
             'Writing follow-up…',
-            state.ai!.compose(
+            (ai) => ai.compose(
               'A short, friendly follow-up nudge: I sent an email about "${fu.subject}" and have not heard back yet. '
               'Ask if they had a chance to look at it.',
               to: fu.to,
@@ -141,10 +167,16 @@ class _ComposePageState extends State<ComposePage> {
     if (widget.initialBody != null) _body.text = widget.initialBody!;
     if (widget.aiReplyInstruction != null && r != null && state.ai != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _runAi('Writing reply…', state.ai!.draftReply(state.contentOf(r), instruction: widget.aiReplyInstruction!));
+        _runAi('Writing reply…', (ai) => ai.draftReply(state.contentOf(r), instruction: widget.aiReplyInstruction!));
       });
     }
-    _showAiWriter = _original == null && restore == null && widget.followUpOf == null && state.aiReady && _body.text.isEmpty;
+    // Offer "what should it say?" when starting from an empty message or reply.
+    _showIntent = widget.forwardOf == null &&
+        restore == null &&
+        widget.followUpOf == null &&
+        widget.aiReplyInstruction == null &&
+        state.aiReady &&
+        _body.text.isEmpty;
     // The AI toolbar offers rewrites only once there is text.
     var hadText = _body.text.trim().isNotEmpty;
     _body.addListener(() {
@@ -152,6 +184,25 @@ class _ComposePageState extends State<ComposePage> {
       if (hasText != hadText && mounted) setState(() => hadText = hasText);
     });
     _initialSnapshot = _snapshot();
+    _savedDraft = restore?.replacesDraft;
+    // Autosave like Mail and Gmail, so a crash or quit doesn't lose much.
+    _autosave = Timer.periodic(const Duration(seconds: 30), (_) => _autosaveNow());
+  }
+
+  Future<void> _autosaveNow() async {
+    if (!mounted || _sent || !_dirty || _generating || _from?.connected != true) return;
+    final snap = _snapshot();
+    if (snap == _savedSnapshot) return;
+    final state = context.read<AppState>();
+    try {
+      final saved = await state.saveDraft(_mail(state), quiet: true);
+      _savedSnapshot = snap;
+      // Without a UID we couldn't replace it next time; stop autosaving.
+      if (saved == null) _autosave?.cancel();
+      _savedDraft = saved;
+    } catch (_) {
+      // Try again on the next tick.
+    }
   }
 
   String _snapshot() => [_to.text, _cc.text, _bcc.text, _subject.text, _body.text, _files.length].join('\u0000');
@@ -178,8 +229,9 @@ class _ComposePageState extends State<ComposePage> {
 
   @override
   void dispose() {
+    _autosave?.cancel();
     _aiSub?.cancel();
-    for (final c in [_to, _cc, _bcc, _subject, _body, _prompt]) {
+    for (final c in [_to, _cc, _bcc, _subject, _body, _prompt, _intentNotes]) {
       c.dispose();
     }
     _bodyFocus.dispose();
@@ -191,12 +243,22 @@ class _ComposePageState extends State<ComposePage> {
 
   // ------------------------------------------------------------------ AI
 
-  void _runAi(String label, Stream<String> stream) {
+  /// Runs an AI writing job into the body. [job] gets the current AI, so a
+  /// failed job can be re-run as is after switching models.
+  void _runAi(String label, Stream<String> Function(EmailAi ai) job) {
+    final state = context.read<AppState>();
+    final ai = state.ai;
+    if (ai == null) return;
     _aiSub?.cancel();
+    _lastJob = job;
+    _lastLabel = label;
     _undoText = _body.text;
+    final who = state.currentWritingChoice;
+    final stream = job(ai); // reads the current body before it is cleared
     final buf = StringBuffer();
     setState(() {
       _aiLabel = label;
+      _aiFailure = null;
       _preview = false;
       _body.text = '';
     });
@@ -206,8 +268,14 @@ class _ComposePageState extends State<ComposePage> {
         _body.value = TextEditingValue(text: buf.toString());
       },
       onError: (Object e) {
-        _snack('AI error: $e');
         _body.text = _undoText ?? '';
+        _undoText = null;
+        if (mounted) {
+          setState(() => _aiFailure = (
+                message: e is AiException ? describeAiError(e, who) : 'Writing failed: $e',
+                fallback: state.fallbackFor(who),
+              ));
+        }
         _finishAi();
       },
       onDone: () {
@@ -229,6 +297,23 @@ class _ComposePageState extends State<ComposePage> {
     _aiSub?.cancel();
     _body.text = EmailAi.cleanDraft(_body.text);
     _finishAi();
+  }
+
+  /// Switches to the suggested model and runs the failed job again.
+  Future<void> _retryWith(WritingChoice choice) async {
+    final job = _lastJob;
+    final label = _lastLabel;
+    await context.read<AppState>().setWritingChoice(choice);
+    if (!mounted || job == null) return;
+    _runAi(label ?? 'Writing…', job);
+  }
+
+  void _writeFromIntent(IntentChoice choice) {
+    final state = context.read<AppState>();
+    final r = widget.replyTo;
+    final original = r == null ? null : state.contentOf(r);
+    setState(() => _showIntent = false);
+    _runAi('Writing…', (ai) => ai.writeFromIntent(choice, replyTo: original, to: _to.text, subject: _subject.text));
   }
 
   void _undo() {
@@ -307,10 +392,12 @@ class _ComposePageState extends State<ComposePage> {
         bcc: _bcc.text,
         subject: _subject.text.trim(),
         body: _finalBody(state),
-        inReplyTo: widget.replyTo,
+        // Keep threading when this is a reopened draft or an undone send.
+        inReplyTo: widget.replyTo ?? widget.restore?.inReplyTo,
         files: [..._files],
         sendAt: sendAt,
         followUpDays: _followUpDays,
+        replacesDraft: _savedDraft,
       );
 
   Future<void> _send({DateTime? at}) async {
@@ -333,8 +420,9 @@ class _ComposePageState extends State<ComposePage> {
       _snack('${_from?.config.email} is not connected right now.');
       return;
     }
+    _autosave?.cancel();
+    _sent = true; // stops any further autosave
     await state.sendMail(_mail(state, sendAt: at));
-    _sent = true;
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -375,6 +463,13 @@ class _ComposePageState extends State<ComposePage> {
     final files = await openFiles();
     if (files.isEmpty) return;
     setState(() => _files.addAll([for (final f in files) File(f.path)]));
+    // Most mail servers refuse messages over about 25 MB (attachments grow
+    // by a third when encoded).
+    final bytes = _files.fold<int>(0, (sum, f) => sum + (f.existsSync() ? f.lengthSync() : 0));
+    if (bytes * 4 / 3 > 25 * 1024 * 1024) {
+      _snack('Attachments total ${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB. '
+          'Many mail servers reject messages over 25 MB; consider sharing a link instead.');
+    }
   }
 
   Future<bool> _confirmLeave() async {
@@ -392,9 +487,15 @@ class _ComposePageState extends State<ComposePage> {
         ],
       ),
     );
-    if (choice == 'discard') return true;
+    if (choice == 'discard') {
+      _autosave?.cancel();
+      final d = _savedDraft;
+      if (d != null) unawaited(state.discardDraft(d));
+      return true;
+    }
     if (choice != 'save' || _from == null) return false;
     try {
+      _autosave?.cancel();
       await state.saveDraft(_mail(state));
       return true;
     } catch (e) {
@@ -474,12 +575,77 @@ class _ComposePageState extends State<ComposePage> {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final ai = state.ai;
-    final theme = Theme.of(context);
+    final c = MacColors.of(context);
     final title = widget.forwardOf != null
         ? 'Forward'
         : widget.replyTo != null
             ? 'Reply'
-            : 'New message';
+            : 'New Message';
+    final busy = _generating || _loadingAttachments;
+
+    final header = SizedBox(
+      height: kToolbarHeight52,
+      child: Row(children: [
+        // Room for the window's traffic lights.
+        SizedBox(width: useMacWindow ? kTitlebarInset : 8),
+        ToolButton(icon: CupertinoIcons.xmark, tooltip: 'Close (Esc)', onPressed: () => Navigator.of(context).maybePop()),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            _subject.text.trim().isEmpty ? title : _subject.text.trim(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.label),
+          ),
+        ),
+        ToolButton(icon: CupertinoIcons.paperclip, tooltip: 'Attach Files', onPressed: _attach),
+        ToolButton(icon: CupertinoIcons.doc_on_doc, tooltip: 'Templates', onPressed: () => _templates(state)),
+        ToolButton(
+          icon: _preview ? CupertinoIcons.pencil : CupertinoIcons.eye,
+          tooltip: _preview ? 'Edit' : 'Preview Formatting',
+          onPressed: _generating ? null : () => setState(() => _preview = !_preview),
+        ),
+        ToolbarItem(
+          child: PopupMenuButton<int>(
+        popUpAnimationStyle: AnimationStyle.noAnimation,
+            tooltip: 'Remind Me If No Reply',
+            initialValue: _followUpDays ?? 0,
+            onSelected: (d) => setState(() => _followUpDays = d == 0 ? null : d),
+            itemBuilder: (_) => const [
+              CheckedPopupMenuItem(value: 0, height: 32, child: Text('No Follow-Up Reminder')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 1, height: 32, child: Text('Remind Me If No Reply in 1 Day')),
+              PopupMenuItem(value: 3, height: 32, child: Text('Remind Me If No Reply in 3 Days')),
+              PopupMenuItem(value: 7, height: 32, child: Text('Remind Me If No Reply in 1 Week')),
+            ],
+            child: SizedBox(
+              width: 32,
+              height: 28,
+              child: Icon(_followUpDays == null ? CupertinoIcons.bell : CupertinoIcons.bell_fill,
+                  size: 16, color: _followUpDays == null ? c.secondaryLabel : c.accent),
+            ),
+          ),
+        ),
+        ToolButton(icon: CupertinoIcons.clock, tooltip: 'Send Later', onPressed: busy ? null : _sendLater),
+        const SizedBox(width: 4),
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: ToolbarItem(
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                minimumSize: const Size(0, 28),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              icon: const Icon(CupertinoIcons.paperplane_fill, size: 13),
+              label: const Text('Send'),
+              onPressed: busy ? null : _send,
+            ),
+          ),
+        ),
+      ]),
+    );
 
     return PopScope(
       canPop: !_dirty,
@@ -492,189 +658,171 @@ class _ComposePageState extends State<ComposePage> {
       },
       child: CallbackShortcuts(
         bindings: {
+          // Apple Mail sends with ⇧⌘D, Gmail with ⌘↩.
+          const SingleActivator(LogicalKeyboardKey.keyD, meta: true, shift: true): _send,
           const SingleActivator(LogicalKeyboardKey.enter, meta: true): _send,
           const SingleActivator(LogicalKeyboardKey.escape): () => Navigator.of(context).maybePop(),
+          const SingleActivator(LogicalKeyboardKey.keyW, meta: true): () => Navigator.of(context).maybePop(),
         },
         child: Scaffold(
-          appBar: AppBar(
-            title: Text(title),
-            actions: [
-              IconButton(icon: const Icon(Icons.attach_file), tooltip: 'Attach files', onPressed: _attach),
-              IconButton(icon: const Icon(Icons.description_outlined), tooltip: 'Templates', onPressed: () => _templates(state)),
-              IconButton(
-                icon: Icon(_preview ? Icons.edit : Icons.visibility_outlined),
-                tooltip: _preview ? 'Edit' : 'Preview formatting',
-                onPressed: _generating ? null : () => setState(() => _preview = !_preview),
-              ),
-              PopupMenuButton<int>(
-                tooltip: 'Remind me if no reply',
-                icon: Icon(_followUpDays == null ? Icons.notifications_none : Icons.notifications_active,
-                    color: _followUpDays == null ? null : theme.colorScheme.primary),
-                initialValue: _followUpDays ?? 0,
-                onSelected: (d) => setState(() => _followUpDays = d == 0 ? null : d),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 0, child: Text('No follow-up reminder')),
-                  PopupMenuItem(value: 1, child: Text('Remind me if no reply in 1 day')),
-                  PopupMenuItem(value: 3, child: Text('Remind me if no reply in 3 days')),
-                  PopupMenuItem(value: 7, child: Text('Remind me if no reply in 1 week')),
-                ],
-              ),
-              const SizedBox(width: 4),
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.horizontal(left: Radius.circular(20))),
-                    ),
-                    icon: const Icon(Icons.send, size: 16),
-                    label: const Text('Send'),
-                    onPressed: _generating || _loadingAttachments ? null : _send,
-                  ),
-                  const SizedBox(width: 1),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      minimumSize: const Size(32, 40),
-                      shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.horizontal(right: Radius.circular(20))),
-                    ),
-                    onPressed: _generating || _loadingAttachments ? null : _sendLater,
-                    child: const Tooltip(message: 'Send later', child: Icon(Icons.schedule_send, size: 16)),
-                  ),
-                ]),
-              ),
+          backgroundColor: c.window,
+          body: Column(children: [
+            header,
+            const Hairline(),
+            if (state.sessions.length > 1) ...[_fromPicker(state), const Hairline(indent: 16)],
+            _recipientField('To:', _to, state,
+                trailing: _showCc
+                    ? null
+                    : TextButton(onPressed: () => setState(() => _showCc = true), child: const Text('Cc/Bcc'))),
+            const Hairline(indent: 16),
+            if (_showCc) ...[
+              _recipientField('Cc:', _cc, state),
+              const Hairline(indent: 16),
+              _recipientField('Bcc:', _bcc, state),
+              const Hairline(indent: 16),
             ],
-          ),
-          body: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 860),
-              child: Column(children: [
-                if (state.sessions.length > 1) _fromPicker(state),
-                _recipientField('To', _to, state,
-                    trailing: TextButton(
-                      onPressed: () => setState(() => _showCc = !_showCc),
-                      child: const Text('Cc/Bcc'),
-                    )),
-                if (_showCc) ...[
-                  _recipientField('Cc', _cc, state),
-                  _recipientField('Bcc', _bcc, state),
-                ],
-                _field('Subject', _subject,
-                    trailing: ai == null
-                        ? null
-                        : _suggestingSubject
-                            ? const Padding(
-                                padding: EdgeInsets.all(12),
-                                child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-                              )
-                            : IconButton(
-                                icon: Icon(Icons.auto_awesome, size: 16, color: theme.colorScheme.primary),
-                                tooltip: 'Suggest a subject',
-                                onPressed: () => _suggestSubject(ai),
-                              )),
-                if (_files.isNotEmpty || _loadingAttachments)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Wrap(spacing: 6, runSpacing: 6, children: [
-                        if (_loadingAttachments)
-                          const Chip(
-                            avatar: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)),
-                            label: Text('Loading attachments…'),
-                          ),
-                        for (final f in _files)
-                          InputChip(
-                            avatar: const Icon(Icons.attach_file, size: 16),
-                            label: Text(f.uri.pathSegments.last),
-                            onDeleted: () => setState(() => _files.remove(f)),
-                          ),
-                      ]),
-                    ),
-                  ),
-                if (ai != null) _aiToolbar(ai, theme, state),
-                if (ai != null && _showAiWriter && !_generating) _aiWriter(ai, theme),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: _preview
-                        ? SingleChildScrollView(
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                              child: HtmlWidget(
-                                md.markdownToHtml(_body.text, extensionSet: md.ExtensionSet.gitHubWeb),
-                                textStyle: const TextStyle(color: Colors.black87, fontSize: 14),
-                              ),
-                            ),
+            _field('Subject:', _subject,
+                trailing: ai == null
+                    ? null
+                    : _suggestingSubject
+                        ? const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)),
                           )
-                        : TextField(
-                            controller: _body,
-                            focusNode: _bodyFocus,
-                            readOnly: _generating,
-                            maxLines: null,
-                            expands: true,
-                            textAlignVertical: TextAlignVertical.top,
-                            style: theme.textTheme.bodyLarge?.copyWith(height: 1.5),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              hintText: 'Write your message… (**bold** and "- " bullets are sent as formatting)',
-                            ),
-                          ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(children: [
-                    if (widget.replyTo != null && widget.restore == null)
-                      Expanded(
-                        child: CheckboxListTile(
-                          dense: true,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          value: _includeQuote,
-                          onChanged: (v) => setState(() => _includeQuote = v ?? true),
-                          title: Text('Include original message (${MailService.senderName(widget.replyTo!)})'),
-                        ),
-                      )
-                    else
-                      const Spacer(),
-                    if ((state.userData.signatures[_from?.id] ?? '').trim().isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text('Signature added when sending', style: theme.textTheme.labelSmall),
-                      ),
-                    if (_followUpDays != null)
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Text('Follow-up reminder in $_followUpDays day${_followUpDays == 1 ? '' : 's'}',
-                            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
+                        : ToolButton(
+                            icon: CupertinoIcons.sparkles,
+                            size: 14,
+                            tooltip: 'Suggest a Subject',
+                            onPressed: () => _suggestSubject(ai),
+                          )),
+            const Hairline(),
+            if (_files.isNotEmpty || _loadingAttachments)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(spacing: 6, runSpacing: 6, children: [
+                    if (_loadingAttachments) const Pill(label: 'Loading attachments…', icon: CupertinoIcons.paperclip),
+                    for (final f in _files)
+                      Pill(
+                        label: f.uri.pathSegments.last,
+                        icon: CupertinoIcons.paperclip,
+                        tooltip: 'Click to remove',
+                        onTap: () => setState(() => _files.remove(f)),
                       ),
                   ]),
                 ),
-              ]),
+              ),
+            // The intent panel has its own model switcher.
+            if (ai != null && !(_showIntent && !_generating && _body.text.trim().isEmpty && _aiFailure == null)) _aiBar(ai, state),
+            if (ai != null && _showIntent && !_generating)
+              IntentPanel(
+                notes: _intentNotes,
+                replyTo: widget.replyTo == null ? null : state.contentOf(widget.replyTo!),
+                to: _to.text,
+                subject: _subject.text,
+                onWrite: _writeFromIntent,
+                onClose: () => setState(() => _showIntent = false),
+              ),
+            if (ai != null && _showAiWriter && !_generating && !_showIntent) _editPrompt(),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                child: _preview
+                    ? SingleChildScrollView(
+                        child: HtmlWidget(
+                          MailService.bodyToHtml(_body.text),
+                          textStyle: TextStyle(color: c.label, fontSize: 14),
+                        ),
+                      )
+                    : TextField(
+                        controller: _body,
+                        focusNode: _bodyFocus,
+                        readOnly: _generating,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        style: TextStyle(fontSize: 14, height: 1.5, color: c.label),
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          hintText: 'Write your message. **bold** and "- " lists are sent as formatting.',
+                          hintStyle: TextStyle(color: c.tertiaryLabel),
+                        ),
+                      ),
+              ),
             ),
-          ),
+            _footer(state),
+          ]),
         ),
       ),
     );
   }
 
-  Widget _fromPicker(AppState state) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Row(children: [
+  Widget _footer(AppState state) {
+    final c = MacColors.of(context);
+    final small = TextStyle(fontSize: 11, color: c.secondaryLabel);
+    final r = widget.replyTo;
+    final hasSignature = (state.userData.signatures[_from?.id] ?? '').trim().isNotEmpty;
+    if (r == null && !hasSignature && _followUpDays == null) return const SizedBox(height: 8);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 16, 6),
+      child: Row(children: [
+        if (r != null && widget.restore == null) ...[
           SizedBox(
-            width: 64,
-            child: Text('From', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            width: 28,
+            child: Checkbox(
+              value: _includeQuote,
+              visualDensity: VisualDensity.compact,
+              onChanged: (v) => setState(() => _includeQuote = v ?? true),
+            ),
           ),
+          Flexible(child: Text('Include original message from ${MailService.senderName(r)}', style: small)),
+        ],
+        const Spacer(),
+        if (hasSignature) Padding(padding: const EdgeInsets.only(left: 12), child: Text('Signature added when sending', style: small)),
+        if (_followUpDays != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Text('Reminder if no reply in $_followUpDays day${_followUpDays == 1 ? '' : 's'}', style: small),
+          ),
+      ]),
+    );
+  }
+
+  Widget _label(String text) => SizedBox(
+        width: 72,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: Text(text, textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: MacColors.of(context).secondaryLabel)),
+        ),
+      );
+
+  static const _fieldStyle = TextStyle(fontSize: 13);
+  // Mail's header fields are plain text with hairlines between them.
+  static const _fieldDecoration = InputDecoration(
+    border: InputBorder.none,
+    enabledBorder: InputBorder.none,
+    focusedBorder: InputBorder.none,
+    filled: false,
+    isDense: true,
+    contentPadding: EdgeInsets.symmetric(vertical: 10),
+  );
+
+  Widget _fromPicker(AppState state) => Padding(
+        padding: const EdgeInsets.only(right: 16),
+        child: Row(children: [
+          _label('From:'),
           DropdownButtonHideUnderline(
             child: DropdownButton<AccountSession>(
               value: _from,
+              isDense: true,
+              style: _fieldStyle.copyWith(color: MacColors.of(context).label),
               items: [
                 for (final s in state.sessions)
-                  DropdownMenuItem(value: s, child: AccountBadge(config: s.config, index: state.indexOf(s))),
+                  DropdownMenuItem(value: s, child: Text(s.config.displayName.isEmpty ? s.config.email : '${s.config.displayName} – ${s.config.email}')),
               ],
               onChanged: (s) => setState(() => _from = s),
             ),
@@ -682,20 +830,17 @@ class _ComposePageState extends State<ComposePage> {
           if (_from != null && !_from!.connected)
             Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: Text('not connected', style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12)),
+              child: Text('Not connected', style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12)),
             ),
         ]),
       );
 
   Widget _field(String label, TextEditingController c, {Widget? trailing}) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.only(right: 12),
         child: Row(children: [
-          SizedBox(
-            width: 64,
-            child: Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ),
+          _label(label),
           Expanded(
-            child: TextField(controller: c, decoration: const InputDecoration(border: InputBorder.none, isDense: true)),
+            child: TextField(controller: c, style: _fieldStyle, decoration: _fieldDecoration, onChanged: (_) => setState(() {})),
           ),
           ?trailing,
         ]),
@@ -704,14 +849,12 @@ class _ComposePageState extends State<ComposePage> {
   /// An address field that suggests people you have emailed before.
   Widget _recipientField(String label, TextEditingController c, AppState state, {Widget? trailing}) {
     final focus = _fieldFocus.putIfAbsent(c, FocusNode.new);
+    final colors = MacColors.of(context);
     String lastToken(String text) => text.split(RegExp(r'[,;]')).last.trim();
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.only(right: 12),
       child: Row(children: [
-        SizedBox(
-          width: 64,
-          child: Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-        ),
+        _label(label),
         Expanded(
           child: RawAutocomplete<(String, String)>(
             textEditingController: c,
@@ -732,22 +875,28 @@ class _ComposePageState extends State<ComposePage> {
             fieldViewBuilder: (context, controller, focusNode, onSubmit) => TextField(
               controller: controller,
               focusNode: focusNode,
-              decoration: const InputDecoration(border: InputBorder.none, isDense: true),
+              style: _fieldStyle,
+              decoration: _fieldDecoration,
             ),
             optionsViewBuilder: (context, onSelected, options) => Align(
               alignment: Alignment.topLeft,
               child: Material(
                 elevation: 4,
+                color: colors.window,
                 borderRadius: BorderRadius.circular(8),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 420, maxHeight: 260),
-                  child: ListView(shrinkWrap: true, padding: EdgeInsets.zero, children: [
+                  child: ListView(shrinkWrap: true, padding: const EdgeInsets.symmetric(vertical: 4), children: [
                     for (final o in options)
-                      ListTile(
-                        dense: true,
-                        title: Text(o.$2.isEmpty ? o.$1 : o.$2),
-                        subtitle: o.$2.isEmpty ? null : Text(o.$1),
+                      InkWell(
                         onTap: () => onSelected(o),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(o.$2.isEmpty ? o.$1 : o.$2, style: TextStyle(fontSize: 13, color: colors.label)),
+                            if (o.$2.isNotEmpty) Text(o.$1, style: TextStyle(fontSize: 11, color: colors.secondaryLabel)),
+                          ]),
+                        ),
                       ),
                   ]),
                 ),
@@ -760,89 +909,104 @@ class _ComposePageState extends State<ComposePage> {
     );
   }
 
-  Widget _aiToolbar(EmailAi ai, ThemeData theme, AppState state) {
+  /// The AI row: which model writes (one click to change), then actions.
+  Widget _aiBar(EmailAi ai, AppState state) {
+    final c = MacColors.of(context);
     final hasText = _body.text.trim().isNotEmpty;
+    final failure = _aiFailure;
     final languages = [
       ?_replyLanguage,
       ...Languages.common.where((l) => l != _replyLanguage && l != state.settings.myLanguage),
     ];
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: _generating
-          ? Row(children: [
-              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-              const SizedBox(width: 10),
-              Text(_aiLabel ?? 'Writing…'),
-              const Spacer(),
-              TextButton.icon(onPressed: _stopAi, icon: const Icon(Icons.stop, size: 16), label: const Text('Stop')),
-            ])
-          : Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              Icon(Icons.auto_awesome, size: 16, color: theme.colorScheme.primary),
-              ActionChip(
-                label: const Text('Write for me'),
-                onPressed: () => setState(() => _showAiWriter = !_showAiWriter),
+    final Widget content;
+    if (_generating) {
+      content = Row(children: [
+        const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text('${_aiLabel ?? 'Writing…'}  ·  ${state.currentWritingChoice.label}',
+              overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: c.secondaryLabel)),
+        ),
+        Pill(label: 'Stop', icon: CupertinoIcons.stop_fill, onTap: _stopAi),
+      ]);
+    } else {
+      content = Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        const WriterSwitcher(),
+        if (!_showIntent && !hasText)
+          Pill(label: 'Write with AI', icon: CupertinoIcons.sparkles, onTap: () => setState(() => _showIntent = true)),
+        if (hasText) ...[
+          Pill(label: 'Change…', icon: CupertinoIcons.sparkles, onTap: () => setState(() => _showAiWriter = !_showAiWriter)),
+          for (final style in RewriteStyle.values)
+            Pill(label: style.label, onTap: () => _runAi('${style.label}…', (ai) => ai.rewrite(_body.text, style))),
+          if (_replyLanguage != null)
+            Pill(
+              label: 'In $_replyLanguage',
+              icon: CupertinoIcons.globe,
+              onTap: () => _runAi('Translating to $_replyLanguage…',
+                  (ai) => ai.translate(_body.text, _replyLanguage!, source: state.settings.myLanguage, forSending: true)),
+            ),
+          PopupMenuButton<String>(
+        popUpAnimationStyle: AnimationStyle.noAnimation,
+            tooltip: 'Translate',
+            onSelected: (l) => _runAi('Translating to $l…', (ai) => ai.translate(_body.text, l, forSending: true)),
+            itemBuilder: (_) => [for (final l in languages) PopupMenuItem(value: l, height: 32, child: Text(l))],
+            child: const IgnorePointer(child: Pill(label: 'Translate…', icon: CupertinoIcons.globe, onTap: _noop)),
+          ),
+        ],
+        if (_undoText != null) Pill(label: 'Undo AI', icon: CupertinoIcons.arrow_uturn_left, onTap: _undo),
+      ]);
+    }
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 0), child: Align(alignment: Alignment.centerLeft, child: content)),
+      if (failure != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Row(children: [
+            Icon(CupertinoIcons.exclamationmark_circle, size: 14, color: c.secondaryLabel),
+            const SizedBox(width: 6),
+            Expanded(child: Text(failure.message, style: TextStyle(fontSize: 12, color: c.label))),
+            if (failure.fallback != null)
+              Pill(
+                label: 'Try with ${failure.fallback!.label}',
+                icon: CupertinoIcons.arrow_clockwise,
+                selected: true,
+                onTap: () => _retryWith(failure.fallback!),
               ),
-              if (hasText) ...[
-                for (final style in RewriteStyle.values)
-                  ActionChip(
-                    label: Text(style.label),
-                    onPressed: () => _runAi('${style.label}…', ai.rewrite(_body.text, style)),
-                  ),
-                if (_replyLanguage != null)
-                  ActionChip(
-                    avatar: const Icon(Icons.translate, size: 14),
-                    label: Text('In $_replyLanguage'),
-                    onPressed: () => _runAi('Translating to $_replyLanguage…',
-                        ai.translate(_body.text, _replyLanguage!, source: state.settings.myLanguage, forSending: true)),
-                  ),
-                PopupMenuButton<String>(
-                  tooltip: 'Translate',
-                  onSelected: (l) => _runAi('Translating to $l…', ai.translate(_body.text, l, forSending: true)),
-                  itemBuilder: (_) => [for (final l in languages) PopupMenuItem(value: l, child: Text(l))],
-                  child: const Chip(avatar: Icon(Icons.translate, size: 14), label: Text('Translate…')),
-                ),
-              ],
-              if (_undoText != null)
-                TextButton.icon(onPressed: _undo, icon: const Icon(Icons.undo, size: 16), label: const Text('Undo AI')),
-            ]),
-    );
+            ToolButton(icon: CupertinoIcons.xmark, size: 12, tooltip: 'Dismiss', onPressed: () => setState(() => _aiFailure = null)),
+          ]),
+        ),
+    ]);
   }
 
-  Widget _aiWriter(EmailAi ai, ThemeData theme) {
-    final hasText = _body.text.trim().isNotEmpty;
+  static void _noop() {}
+
+  /// Free-form edit of an existing draft ("mention the deadline is Friday").
+  Widget _editPrompt() {
+    final c = MacColors.of(context);
     void go() {
       final p = _prompt.text.trim();
       if (p.isEmpty) return;
       setState(() => _showAiWriter = false);
-      if (hasText) {
-        _runAi('Editing…', ai.customEdit(_body.text, p));
-      } else {
-        _runAi('Writing…', ai.compose(p, to: _to.text, subject: _subject.text));
-      }
+      _runAi('Editing…', (ai) => ai.customEdit(_body.text, p));
       _prompt.clear();
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: TextField(
         controller: _prompt,
         autofocus: true,
         minLines: 1,
         maxLines: 4,
+        style: const TextStyle(fontSize: 13),
         onSubmitted: (_) => go(),
         decoration: InputDecoration(
-          hintText: hasText
-              ? 'How should I change it? e.g. "mention the deadline is Friday"'
-              : 'What should the email say? e.g. "ask landlord to fix leaking sink this week, home after 5"',
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           isDense: true,
-          suffixIcon: IconButton(icon: const Icon(Icons.arrow_upward), tooltip: 'Write', onPressed: go),
+          filled: true,
+          fillColor: c.fill,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          hintText: 'How should it change? e.g. "mention the deadline is Friday"',
+          suffixIcon: ToolButton(icon: CupertinoIcons.arrow_up_circle_fill, tooltip: 'Apply', onPressed: go),
         ),
       ),
     );

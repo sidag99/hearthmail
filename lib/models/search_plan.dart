@@ -11,7 +11,66 @@ class SearchPlan {
     this.unreadOnly = false,
     this.flaggedOnly = false,
     this.hasAttachment = false,
+    this.matchAll = false,
   });
+
+  /// Every keyword must match (typed searches), rather than any of them
+  /// (AI searches, where keywords are alternative wordings).
+  final bool matchAll;
+
+  /// Parses a typed search the way Mail and Gmail do: words must all match,
+  /// "quoted phrases" stay together, and from:, to:, subject:,
+  /// has:attachment, is:unread, is:flagged/starred, after: and before:
+  /// (YYYY-MM-DD) narrow it down.
+  factory SearchPlan.parse(String query) {
+    final tokens = RegExp(r'(\w+):"([^"]*)"|(\w+):(\S+)|"([^"]+)"|(\S+)').allMatches(query);
+    final words = <String>[];
+    String? from, to, subject;
+    DateTime? since, before;
+    var unread = false, flagged = false, attach = false;
+    for (final t in tokens) {
+      final key = (t[1] ?? t[3])?.toLowerCase();
+      final value = t[2] ?? t[4];
+      if (key != null && value != null) {
+        switch (key) {
+          case 'from':
+            from = value;
+          case 'to':
+            to = value;
+          case 'subject':
+            subject = value;
+          case 'has' when value.toLowerCase().startsWith('attach'):
+            attach = true;
+          case 'is' when value.toLowerCase() == 'unread':
+            unread = true;
+          case 'is' when value.toLowerCase() == 'flagged' || value.toLowerCase() == 'starred':
+            flagged = true;
+          case 'after' || 'since':
+            since = DateTime.tryParse(value.replaceAll('/', '-'));
+          case 'before':
+            before = DateTime.tryParse(value.replaceAll('/', '-'));
+          default:
+            words.add('$key:$value'); // not an operator, e.g. a time "10:30"
+        }
+      } else if (t[5] != null) {
+        words.add(t[5]!);
+      } else if (t[6] != null) {
+        words.add(t[6]!);
+      }
+    }
+    return SearchPlan(
+      keywords: words,
+      from: from,
+      to: to,
+      subject: subject,
+      since: since,
+      before: before,
+      unreadOnly: unread,
+      flaggedOnly: flagged,
+      hasAttachment: attach,
+      matchAll: true,
+    );
+  }
 
   final List<String> keywords;
   final String? from;
@@ -53,6 +112,7 @@ class SearchPlan {
   }
 
   SearchPlan withoutKeywords() => SearchPlan(
+        subject: subject,
         from: from,
         to: to,
         since: since,
@@ -76,7 +136,7 @@ class SearchPlan {
   /// Human-readable description shown above results.
   String describe() {
     final parts = <String>[
-      if (keywords.isNotEmpty) 'about ${keywords.map((k) => '"$k"').join(' or ')}',
+      if (keywords.isNotEmpty) 'about ${keywords.map((k) => '"$k"').join(matchAll ? ' and ' : ' or ')}',
       if (from != null) 'from $from',
       if (to != null) 'to $to',
       if (subject != null) 'subject "$subject"',
@@ -99,7 +159,10 @@ class SearchPlan {
     if (before != null) c.add('BEFORE ${_imapDate(before!)}');
     if (unreadOnly) c.add('UNSEEN');
     if (flaggedOnly) c.add('FLAGGED');
-    if (keywords.isNotEmpty) {
+    if (keywords.isNotEmpty && matchAll) {
+      // All words must match: IMAP criteria are ANDed by default.
+      c.addAll([for (final k in keywords) 'TEXT ${_q(k)}']);
+    } else if (keywords.isNotEmpty) {
       // Any keyword may match: OR them together (IMAP OR is binary).
       var expr = 'TEXT ${_q(keywords.last)}';
       for (final k in keywords.reversed.skip(1)) {
@@ -123,7 +186,7 @@ class SearchPlan {
     if (flaggedOnly) c.add('is:starred');
     if (hasAttachment) c.add('has:attachment');
     if (keywords.isNotEmpty) {
-      c.add('(${keywords.map(_g).join(' OR ')})');
+      c.add(matchAll ? keywords.map(_g).join(' ') : '(${keywords.map(_g).join(' OR ')})');
     }
     return c.join(' ');
   }

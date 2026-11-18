@@ -34,7 +34,12 @@ class AppSettings {
     this.showCategories = false,
     this.priorityFirst = false,
     this.showContactPhotos = false,
+    this.markReadDelay = 0,
   });
+
+  /// Seconds before an opened message is marked read: 0 = at once,
+  /// -1 = never (only by hand), like Apple Mail's "Mark as read" setting.
+  final int markReadDelay;
 
   /// Mail's view options (the ⋯ menu above the message list).
   final bool showCategories;
@@ -116,6 +121,7 @@ class AppSettings {
     bool? showCategories,
     bool? priorityFirst,
     bool? showContactPhotos,
+    int? markReadDelay,
   }) =>
       AppSettings(
         groupConversations: groupConversations ?? this.groupConversations,
@@ -143,6 +149,7 @@ class AppSettings {
         showCategories: showCategories ?? this.showCategories,
         priorityFirst: priorityFirst ?? this.priorityFirst,
         showContactPhotos: showContactPhotos ?? this.showContactPhotos,
+        markReadDelay: markReadDelay ?? this.markReadDelay,
       );
 
   Map<String, dynamic> toJson() => {
@@ -171,6 +178,7 @@ class AppSettings {
         'showCategories': showCategories,
         'priorityFirst': priorityFirst,
         'showContactPhotos': showContactPhotos,
+        'markReadDelay': markReadDelay,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -199,6 +207,7 @@ class AppSettings {
         showCategories: j['showCategories'] as bool? ?? false,
         priorityFirst: j['priorityFirst'] as bool? ?? false,
         showContactPhotos: j['showContactPhotos'] as bool? ?? false,
+        markReadDelay: j['markReadDelay'] as int? ?? 0,
       );
 }
 

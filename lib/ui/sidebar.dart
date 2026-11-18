@@ -198,7 +198,7 @@ class _SidebarState extends State<Sidebar> {
                 icon: mailboxIcon(b),
                 label: b.isInbox ? 'Inbox' : b.name,
                 selected: state.view == MailView.folder(s.id, b.path),
-                count: b.isInbox ? state.unreadFor(MailView.folder(s.id, b.path)) : 0,
+                count: b.isInbox ? state.unreadFor(MailView.folder(s.id, b.path)) : state.folderUnread(s, b),
                 onTap: () => state.openFolder(s, b),
               ),
         ],

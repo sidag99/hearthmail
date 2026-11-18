@@ -10,7 +10,7 @@ import '../services/user_data.dart';
 import '../state/app_state.dart';
 import 'compose_page.dart';
 import 'mac_style.dart';
-import 'message_view.dart' show showMessageMenu;
+import 'message_view.dart' show openDraft, showMessageMenu;
 import 'widgets/ai_widgets.dart';
 
 /// Dates the way Mail shows them: time today, "Yesterday", weekday this
@@ -200,6 +200,7 @@ class MessageListPane extends StatelessWidget {
             message: m,
             triage: state.triageOf(m),
             showPhoto: state.settings.showContactPhotos,
+            threadCount: state.settings.groupConversations ? state.conversationSize(m) : 1,
             selected: selected,
             // Like Mail, no separator touches the selection highlight.
             showSeparator: !selected && (next == null || !identical(state.selected, next)),
@@ -212,6 +213,8 @@ class MessageListPane extends StatelessWidget {
             },
           );
           final withMenu = GestureDetector(
+            // Like Mail: double-click a draft to keep writing it.
+            onDoubleTap: state.isDraft(m) ? () => openDraft(context, m) : null,
             onSecondaryTapDown: (d) => showMessageMenu(context, m, d.globalPosition),
             onLongPressStart: phone ? (d) => showMessageMenu(context, m, d.globalPosition) : null,
             child: tile,
@@ -252,6 +255,7 @@ class _FilterButton extends StatelessWidget {
     final active = state.listFilter != ListFilter.all;
     return ToolbarItem(
       child: PopupMenuButton<ListFilter>(
+        popUpAnimationStyle: AnimationStyle.noAnimation,
         tooltip: active ? 'Filtered by ${_label(state.listFilter)}' : 'Filter',
         initialValue: state.listFilter,
         onSelected: state.setFilter,
@@ -293,6 +297,7 @@ class _ViewOptionsButton extends StatelessWidget {
     final s = state.settings;
     return ToolbarItem(
       child: PopupMenuButton<_ViewOption>(
+        popUpAnimationStyle: AnimationStyle.noAnimation,
         tooltip: 'View Options',
         onSelected: (o) => switch (o) {
           _ViewOption.categories => state.updateSettings(s.copyWith(showCategories: !s.showCategories)),
@@ -510,6 +515,7 @@ class MessageTile extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.showPhoto = false,
+    this.threadCount = 1,
     this.vip = false,
     this.reminder = false,
     this.suspicious = false,
@@ -518,6 +524,9 @@ class MessageTile extends StatelessWidget {
 
   final MimeMessage message;
   final bool showPhoto;
+
+  /// Messages in this conversation (shown as a count when more than one).
+  final int threadCount;
   final Triage? triage;
   final bool selected;
   final VoidCallback onTap;
@@ -592,6 +601,16 @@ class MessageTile extends StatelessWidget {
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fg),
                       ),
                     ),
+                    if (threadCount > 1)
+                      Container(
+                        margin: const EdgeInsets.only(left: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: selected ? Colors.white70 : c.tertiaryLabel, width: 0.8),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('$threadCount', style: TextStyle(fontSize: 10.5, color: fg2)),
+                      ),
                     const SizedBox(width: 6),
                     Text(formatListDate(MailService.dateOf(message)), style: TextStyle(fontSize: 12, color: fg2)),
                   ]),

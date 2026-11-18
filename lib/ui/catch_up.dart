@@ -146,6 +146,7 @@ class _CatchUpDialogState extends State<_CatchUpDialog> {
     final box = anchor.findRenderObject() as RenderBox?;
     final at = box?.localToGlobal(Offset(0, box.size.height)) ?? Offset.zero;
     final when = await showMenu<DateTime>(
+        popUpAnimationStyle: AnimationStyle.noAnimation,
       context: context,
       position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx + 1, 0),
       items: [

@@ -33,6 +33,12 @@ class CannedAi extends AiProvider {
   Stream<String> chat(List<AiMessage> messages,
       {required String model, double temperature = 0.4, Map<String, dynamic>? jsonSchema}) async* {
     final sys = messages.first.content;
+    if (jsonSchema != null && sys.contains('decide what to say in an email')) {
+      yield '{"goals": ["Send the numbers by Thursday", "Ask for one more day", "Ask whether Q1 is included"], '
+          '"points": ["Confirm you will join on Zoom", "Mention the forecast is a draft", "Ask who else is attending"], '
+          '"tones": ["Friendly", "Brief and direct", "Formal"]}';
+      return;
+    }
     if (jsonSchema != null && sys.startsWith('You brief a busy person')) {
       // One canned line per email, in the order the prompt lists them.
       final n = RegExp(r'^\[\d+\]', multiLine: true).allMatches(messages.last.content).length;
@@ -337,6 +343,33 @@ void main() {
     expect(find.text('Needs You'), findsOneWidget);
     expect(find.text('Reply'), findsWidgets);
     await snap(tester, '11_catch_up');
+  });
+
+  testWidgets('settings window', (tester) async {
+    size(tester, 1200, 800);
+    final state = await sampleState();
+    await tester.pumpWidget(app(state));
+    await tester.tap(find.byTooltip('Settings (⌘,)'));
+    await tester.pumpAndSettle();
+    await snap(tester, '12_settings_general');
+    await tester.tap(find.text('Accounts').last);
+    await tester.pumpAndSettle();
+    await snap(tester, '13_settings_accounts');
+  });
+
+  testWidgets('reply with intent options', (tester) async {
+    size(tester, 1200, 800);
+    final state = await sampleState();
+    final m = state.sessions.first.inboxMessages.first;
+    await tester.pumpWidget(app(state, home: ComposePage(replyTo: m)));
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.text('How do you want to reply?'), findsOneWidget);
+    await tester.tap(find.text('Confirm you will join on Zoom'));
+    await tester.pump();
+    await snap(tester, '14_reply_intents');
   });
 
   testWidgets('phone-width layout', (tester) async {

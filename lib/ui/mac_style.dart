@@ -96,6 +96,12 @@ ThemeData buildMacTheme(Brightness brightness) {
     dividerColor: c.separator,
     dividerTheme: DividerThemeData(color: c.separator, thickness: 0.5, space: 0.5),
     splashFactory: NoSplash.splashFactory,
+    // Mac apps don't slide pages around: switch screens instantly.
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {
+      TargetPlatform.macOS: _InstantTransitions(),
+      TargetPlatform.windows: _InstantTransitions(),
+      TargetPlatform.linux: _InstantTransitions(),
+    }),
     highlightColor: Colors.transparent,
     hoverColor: c.hover,
     extensions: [c],
@@ -215,6 +221,10 @@ final bool useMacWindow =
 
 /// Height of the unified title bar + toolbar, where the window buttons sit.
 const double kToolbarHeight52 = 52;
+
+/// Room the window's close/minimize/zoom buttons need at the top left of
+/// whichever pane touches the window's left edge.
+const double kTitlebarInset = 78;
 
 /// Sets up the native window: transparent unified title bar and room for a
 /// translucent sidebar.
@@ -386,6 +396,57 @@ class InitialsAvatar extends StatelessWidget {
         ),
       ),
       child: Text(initials, style: TextStyle(color: Colors.white, fontSize: size * 0.4, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+
+/// No page transition animation (instant switch), like a Mac app.
+class _InstantTransitions extends PageTransitionsBuilder {
+  const _InstantTransitions();
+
+  @override
+  Widget buildTransitions<T>(PageRoute<T> route, BuildContext context, Animation<double> animation,
+          Animation<double> secondaryAnimation, Widget child) =>
+      child;
+}
+
+/// The top bar of a full-window page (Add Account, …): back button and
+/// title, clear of the window's traffic lights, like a Mac toolbar.
+class MacPageBar extends StatelessWidget implements PreferredSizeWidget {
+  const MacPageBar({super.key, required this.title, this.actions = const []});
+  final String title;
+  final List<Widget> actions;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight52 + 0.5);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MacColors.of(context);
+    return Material(
+      color: c.window,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(
+          height: kToolbarHeight52,
+          child: Row(children: [
+            SizedBox(width: useMacWindow ? kTitlebarInset : 8),
+            ToolButton(
+              icon: Icons.arrow_back_ios_new,
+              size: 14,
+              tooltip: 'Back',
+              onPressed: () => Navigator.of(context).maybePop(),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.label)),
+            ),
+            ...actions,
+            const SizedBox(width: 8),
+          ]),
+        ),
+        const Hairline(),
+      ]),
     );
   }
 }

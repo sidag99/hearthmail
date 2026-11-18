@@ -37,6 +37,9 @@ class OAuthCredentials extends MailCredentials {
 /// names its folder and runs one at a time. Otherwise a background refresh
 /// of the Inbox could slip in between "select Sent" and "delete message 12",
 /// and the wrong message would be deleted.
+/// Reverses a move or delete (for the Undo button).
+typedef UndoAction = Future<void> Function();
+
 class MailService {
   MailService(this.config, MailCredentials credentials, {int? downloadSizeLimit = 256 * 1024})
       : client = MailClient(
@@ -292,15 +295,42 @@ class MailService {
         m.isFlagged = flagged;
       });
 
-  Future<void> delete(Mailbox box, MimeMessage m) => _serial(() async {
+  static bool isTrash(Mailbox box) =>
+      box.hasFlag(MailboxFlag.trash) || const ['trash', 'deleted items', 'deleted messages', 'bin'].contains(box.name.toLowerCase());
+
+  static bool isJunk(Mailbox box) =>
+      box.hasFlag(MailboxFlag.junk) || const ['junk', 'spam', 'junk e-mail', 'junk email'].contains(box.name.toLowerCase());
+
+  /// Turns a library move result into an undo action, when the server
+  /// reported where the message went.
+  UndoAction? _undoMove(MoveResult r) => r.canUndo && r.targetSequence != null
+      ? () => _serial(() async {
+            await client.undoMoveMessages(r);
+          })
+      : null;
+
+  /// Moves to Trash. In Trash itself it deletes for good, like Mail.
+  Future<UndoAction?> delete(Mailbox box, MimeMessage m) => _serial(() async {
         await _ensure(box);
-        await client.deleteMessage(m);
+        if (isTrash(box)) {
+          await client.deleteMessage(m, expunge: true);
+          return null;
+        }
+        final r = await client.deleteMessage(m);
+        return r.canUndo && r.targetSequence != null
+            ? () => _serial(() async {
+                  await client.undoDeleteMessages(r);
+                })
+            : null;
       });
 
-  Future<void> archive(Mailbox box, MimeMessage m) => _serial(() async {
+  Future<UndoAction?> archive(Mailbox box, MimeMessage m) => _serial(() async {
         final boxes = client.mailboxes ?? await client.listMailboxes();
-        final target = client.getMailbox(MailboxFlag.archive, boxes) ??
-            client.getMailbox(MailboxFlag.all, boxes);
+        var target = client.getMailbox(MailboxFlag.archive, boxes) ??
+            (config.isGmail ? client.getMailbox(MailboxFlag.all, boxes) : null) ??
+            boxes.where((b) => b.name.toLowerCase() == 'archive').firstOrNull;
+        // Like Mail: make an Archive mailbox on servers that have none.
+        target ??= config.isGmail ? null : await client.createMailbox('Archive');
         if (target == null) {
           throw MailException(client, 'This account has no Archive folder.');
         }
@@ -308,7 +338,7 @@ class MailService {
         await _ensure(box);
         // On Gmail, moving from Inbox to "All Mail" removes the Inbox label,
         // which is exactly what Gmail's own Archive button does.
-        await client.moveMessage(m, target);
+        return _undoMove(await client.moveMessage(m, target));
       });
 
   /// Fetches specific messages by UID (used to open semantic search hits).
@@ -325,21 +355,50 @@ class MailService {
       });
 
   /// Moves a message to another folder.
-  Future<void> moveTo(Mailbox box, MimeMessage m, Mailbox target) => _serial(() async {
-        if (target.path == box.path) return;
+  Future<UndoAction?> moveTo(Mailbox box, MimeMessage m, Mailbox target) => _serial(() async {
+        if (target.path == box.path) return null;
         await _ensure(box);
-        await client.moveMessage(m, target);
+        return _undoMove(await client.moveMessage(m, target));
       });
 
   /// Moves a message to the Junk/Spam folder (on Gmail this also trains
   /// Gmail's spam filter).
-  Future<void> junk(Mailbox box, MimeMessage m) => _serial(() async {
+  Future<UndoAction?> junk(Mailbox box, MimeMessage m) => _serial(() async {
         final boxes = client.mailboxes ?? await client.listMailboxes();
-        final target = client.getMailbox(MailboxFlag.junk, boxes);
+        final target = client.getMailbox(MailboxFlag.junk, boxes) ?? boxes.where(isJunk).firstOrNull;
         if (target == null) throw MailException(client, 'This account has no Junk folder.');
-        if (target.path == box.path) return;
+        if (target.path == box.path) return null;
         await _ensure(box);
-        await client.moveMessage(m, target);
+        return _undoMove(await client.moveMessage(m, target));
+      });
+
+  /// "Not Junk": back to the Inbox.
+  Future<UndoAction?> notJunk(Mailbox box, MimeMessage m) => _serial(() async {
+        final boxes = client.mailboxes ?? await client.listMailboxes();
+        final inbox = client.getMailbox(MailboxFlag.inbox, boxes) ?? boxes.where((b) => b.isInbox).firstOrNull;
+        if (inbox == null || inbox.path == box.path) return null;
+        await _ensure(box);
+        return _undoMove(await client.moveMessage(m, inbox));
+      });
+
+  /// Unread counts for the folders besides the Inbox (IMAP STATUS), for the
+  /// sidebar. Sent, Drafts, Trash and All Mail are skipped, as in Mail.
+  Future<Map<String, int>> unreadCounts(List<Mailbox> boxes) => _serial(() async {
+        final imap = client.lowLevelIncomingMailClient as ImapClient;
+        final out = <String, int>{};
+        for (final b in boxes) {
+          if (b.isInbox || b.isNotSelectable || isTrash(b) ||
+              b.hasFlag(MailboxFlag.sent) || b.hasFlag(MailboxFlag.drafts) || b.hasFlag(MailboxFlag.all)) {
+            continue;
+          }
+          try {
+            final st = await imap.statusMailbox(b, [StatusFlags.unseen]);
+            out[b.path] = st.messagesUnseen;
+          } catch (_) {
+            // Some servers refuse STATUS on special folders; skip them.
+          }
+        }
+        return out;
       });
 
   /// Moves a message back to the Inbox (e.g. when a snooze ends elsewhere).
@@ -376,7 +435,7 @@ class MailService {
     List<MimePart> forwardedParts = const [],
   }) {
     final html = '<div style="font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.5">'
-        '${md.markdownToHtml(markdownBody, extensionSet: md.ExtensionSet.gitHubWeb)}</div>';
+        '${bodyToHtml(markdownBody)}</div>';
     final plain = markdownToPlain(markdownBody);
     final hasAttachments = files.isNotEmpty || forwardedParts.isNotEmpty;
     final MessageBuilder builder;
@@ -407,9 +466,29 @@ class MailService {
     return builder.buildMimeMessage();
   }
 
-  /// Sends a built message. Sending also appends a copy to Sent over IMAP.
+  /// Gmail and Microsoft 365 file mail sent over SMTP in Sent themselves;
+  /// saving another copy would show it twice.
+  bool get _serverSavesSent {
+    final host = config.imapHost.toLowerCase();
+    return config.isGmail || host.contains('office365') || host.contains('outlook.') || host.contains('hotmail');
+  }
+
+  /// Sends a built message, then files a copy in Sent where the server
+  /// doesn't do that itself. A failure to file the copy never turns a
+  /// delivered message into a "failed" send.
   Future<void> sendBuilt(MimeMessage message, {MimeMessage? inReplyTo, Mailbox? inReplyToBox}) async {
-    await _serial(() => client.sendMessage(message, supportUnicode: true));
+    await _serial(() => client.sendMessage(message, supportUnicode: true, appendToSent: false));
+    if (!_serverSavesSent) {
+      try {
+        await _serial(() async {
+          final boxes = client.mailboxes ?? await client.listMailboxes();
+          final sent = sentMailbox(boxes);
+          if (sent != null) await client.appendMessage(message, sent, flags: [MessageFlags.seen]);
+        });
+      } catch (_) {
+        // Delivered; only the Sent copy is missing.
+      }
+    }
     if (inReplyTo != null && inReplyToBox != null) {
       try {
         await _serial(() async {
@@ -440,7 +519,27 @@ class MailService {
       });
 
   /// Saves an unfinished message to the account's Drafts folder.
-  Future<void> saveDraft(MimeMessage message) => _serial(() => client.saveDraftMessage(message));
+  /// The Drafts folder, if the server has one.
+  Mailbox? draftsMailbox(List<Mailbox> boxes) {
+    for (final b in boxes) {
+      if (b.hasFlag(MailboxFlag.drafts)) return b;
+    }
+    for (final b in boxes) {
+      if (b.name.toLowerCase().contains('draft')) return b;
+    }
+    return null;
+  }
+
+  /// Saves [message] to Drafts and returns where it went and its UID (when
+  /// the server reports it), so a later save can replace it.
+  Future<({Mailbox box, int? uid})> saveDraft(MimeMessage message) => _serial(() async {
+        final boxes = client.mailboxes ?? await client.listMailboxes();
+        final drafts = draftsMailbox(boxes);
+        if (drafts == null) throw Exception('This account has no Drafts folder.');
+        final code = await client.appendMessage(message, drafts, flags: [MessageFlags.draft, MessageFlags.seen]);
+        final ids = code?.targetSequence.toList() ?? const <int>[];
+        return (box: drafts, uid: ids.isEmpty ? null : ids.last);
+      });
 
   /// Convenience wrapper: build and send in one go.
   Future<void> send({
@@ -613,6 +712,26 @@ class MailService {
       s.replaceAll(RegExp(r'^\s*((re|fwd?|aw|wg|sv|vs|tr|rif)\s*(\[\d+\])?\s*:\s*)+', caseSensitive: false), '').trim().toLowerCase();
 
   /// Turns light Markdown into tidy plain text for the text/plain part.
+  /// The HTML part of a message the user typed. Light Markdown (**bold**,
+  /// lists, links) becomes formatting, but line breaks stay exactly where
+  /// they were typed and raw HTML is shown as text, never run.
+  static String bodyToHtml(String text) {
+    final lines = text.replaceAll('\r\n', '\n').split('\n');
+    final out = <String>[];
+    final listItem = RegExp(r'^\s*([-*+]|\d+[.)])\s');
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final next = i + 1 < lines.length ? lines[i + 1] : '';
+      // A Markdown hard break (two trailing spaces) keeps single newlines,
+      // except where the next line starts a list item.
+      final keepBreak = line.trim().isNotEmpty && next.trim().isNotEmpty && !listItem.hasMatch(next);
+      out.add(keepBreak ? '${line.trimRight()}  ' : line);
+    }
+    return md.markdownToHtml(out.join('\n'), extensionSet: md.ExtensionSet.gitHubWeb, encodeHtml: true)
+        // Only the formatting we generate, never HTML typed into the message.
+        .replaceAllMapped(RegExp(r'<(?!/?(p|br|strong|em|ul|ol|li|a|code|pre|blockquote|h[1-6]|hr|del|table|thead|tbody|tr|th|td)\b)'), (_) => '&lt;');
+  }
+
   static String markdownToPlain(String markdown) => markdown
       .replaceAllMapped(RegExp(r'\*\*(.+?)\*\*'), (m) => m[1]!)
       .replaceAllMapped(RegExp(r'__(.+?)__'), (m) => m[1]!)
