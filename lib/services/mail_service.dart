@@ -41,6 +41,20 @@ class OAuthCredentials extends MailCredentials {
 /// Reverses a move or delete (for the Undo button).
 typedef UndoAction = Future<void> Function();
 
+/// The standard mailboxes Mail combines across accounts ("All Sent", …).
+enum MailboxRole {
+  inbox('All Inboxes', 'Inbox'),
+  drafts('All Drafts', 'Drafts'),
+  sent('All Sent', 'Sent'),
+  archive('All Archive', 'Archive'),
+  junk('All Junk', 'Junk'),
+  trash('All Trash', 'Trash');
+
+  const MailboxRole(this.combinedLabel, this.label);
+  final String combinedLabel;
+  final String label;
+}
+
 class MailService {
   MailService(this.config, MailCredentials credentials, {int? downloadSizeLimit = 256 * 1024})
       : client = MailClient(
@@ -327,6 +341,22 @@ class MailService {
         m.isFlagged = true;
       });
 
+  /// An account's mailbox for [role]: by the server's special-use flag,
+  /// else by its usual name.
+  static Mailbox? roleMailbox(List<Mailbox> boxes, MailboxRole role) {
+    Mailbox? pick(MailboxFlag flag, Set<String> names) =>
+        boxes.where((b) => b.hasFlag(flag)).firstOrNull ??
+        boxes.where((b) => !b.isNotSelectable && names.contains(b.name.toLowerCase())).firstOrNull;
+    return switch (role) {
+      MailboxRole.inbox => boxes.where((b) => b.isInbox).firstOrNull,
+      MailboxRole.drafts => pick(MailboxFlag.drafts, const {'drafts', 'draft'}),
+      MailboxRole.sent => pick(MailboxFlag.sent, const {'sent', 'sent mail', 'sent items', 'sent messages'}),
+      MailboxRole.archive => pick(MailboxFlag.archive, const {'archive', 'archives'}),
+      MailboxRole.junk => pick(MailboxFlag.junk, const {'junk', 'spam', 'junk e-mail', 'junk email'}),
+      MailboxRole.trash => pick(MailboxFlag.trash, const {'trash', 'deleted items', 'deleted messages', 'bin'}),
+    };
+  }
+
   static bool isTrash(Mailbox box) =>
       box.hasFlag(MailboxFlag.trash) || const ['trash', 'deleted items', 'deleted messages', 'bin'].contains(box.name.toLowerCase());
 
@@ -437,8 +467,16 @@ class MailService {
   Future<Map<String, int>> unreadCounts(List<Mailbox> boxes) => _serial(() async {
         final imap = client.lowLevelIncomingMailClient as ImapClient;
         final out = <String, int>{};
+        // Drafts show how many there are (like Mail), not how many are unread.
+        final drafts = roleMailbox(boxes, MailboxRole.drafts);
+        if (drafts != null) {
+          try {
+            final st = await imap.statusMailbox(drafts, [StatusFlags.messages]);
+            out[drafts.path] = st.messagesExists;
+          } catch (_) {}
+        }
         for (final b in boxes) {
-          if (b.isInbox || b.isNotSelectable || isTrash(b) ||
+          if (b.isInbox || b.isNotSelectable || isTrash(b) || b.path == drafts?.path ||
               b.hasFlag(MailboxFlag.sent) || b.hasFlag(MailboxFlag.drafts) || b.hasFlag(MailboxFlag.all)) {
             continue;
           }
@@ -640,6 +678,14 @@ class MailService {
   static MailAddress? senderOf(MimeMessage m) {
     final f = m.from ?? m.envelope?.from;
     return (f == null || f.isEmpty) ? null : f.first;
+  }
+
+  /// Who a sent message or draft is to, for the message list (like Mail's
+  /// Sent mailbox, which lists recipients instead of yourself).
+  static String recipientNames(MimeMessage m) {
+    final to = [...?m.to, ...?m.cc];
+    if (to.isEmpty) return 'No Recipients';
+    return to.map((a) => (a.personalName?.trim().isNotEmpty ?? false) ? a.personalName!.trim() : a.email).join(', ');
   }
 
   static String senderName(MimeMessage m) {

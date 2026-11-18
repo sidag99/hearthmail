@@ -31,6 +31,7 @@ String formatListDate(DateTime? d) {
 
 String _viewTitle(AppState state) => switch (state.view.kind) {
       ViewKind.allInboxes => state.sessions.length > 1 ? 'All Inboxes' : 'Inbox',
+      ViewKind.combined => state.view.role!.combinedLabel,
       ViewKind.folder => state.folderBox == null ? '' : (state.folderBox!.isInbox ? 'Inbox' : state.folderBox!.name),
       ViewKind.priority => 'Priority',
       ViewKind.needsReply => 'Needs Reply',
@@ -199,6 +200,7 @@ class MessageListPane extends StatelessWidget {
           final next = i + 1 < list.length ? list[i + 1] : null;
           final tile = MessageTile(
             message: m,
+            outgoing: state.isOutgoing(m),
             triage: state.triageOf(m),
             showPhoto: state.settings.showContactPhotos,
             threadCount: state.settings.groupConversations ? state.conversationSize(m) : 1,
@@ -553,9 +555,13 @@ class MessageTile extends StatelessWidget {
     this.reminder = false,
     this.suspicious = false,
     this.showSeparator = true,
+    this.outgoing = false,
   });
 
   final MimeMessage message;
+
+  /// Sent or draft: show who it is to instead of the sender.
+  final bool outgoing;
   final bool showPhoto;
 
   /// Messages in this conversation (shown as a count when more than one).
@@ -574,6 +580,7 @@ class MessageTile extends StatelessWidget {
     final unread = !message.isSeen;
     final body = MailService.bodyText(message).replaceAll(RegExp(r'\s+'), ' ').trim();
     final t = triage;
+    final who = outgoing ? MailService.recipientNames(message) : MailService.senderName(message);
     final fg = selected ? Colors.white : c.label;
     final fg2 = selected ? Colors.white.withValues(alpha: 0.85) : c.secondaryLabel;
     final needsReply = t != null && t.needsReply && !message.isAnswered;
@@ -619,7 +626,7 @@ class MessageTile extends StatelessWidget {
               if (showPhoto)
                 Padding(
                   padding: const EdgeInsets.only(right: 8, top: 1),
-                  child: InitialsAvatar(MailService.senderName(message), size: 30),
+                  child: InitialsAvatar(who, size: 30),
                 ),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -628,7 +635,7 @@ class MessageTile extends StatelessWidget {
                       Padding(padding: const EdgeInsets.only(right: 4), child: Icon(CupertinoIcons.star_fill, size: 11, color: fg2)),
                     Expanded(
                       child: Text(
-                        MailService.senderName(message),
+                        who,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fg),

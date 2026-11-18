@@ -352,6 +352,21 @@ void main() {
     expect(find.text('Needs You'), findsOneWidget);
     expect(find.text('Reply'), findsWidgets);
     await snap(tester, '11_catch_up');
+    // Hovering a row must keep it readable.
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(find.text('Needs You')) + const Offset(0, 36));
+    await tester.pump(const Duration(milliseconds: 300));
+    await snap(tester, 'audit_catch_up_hover');
+    await mouse.removePointer();
+  });
+
+  testWidgets('sidebar with combined mailboxes', (tester) async {
+    size(tester, 1440, 900);
+    final state = await sampleState();
+    await tester.pumpWidget(app(state));
+    await tester.tap(find.text('All Sent'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await snap(tester, 'audit_sidebar_combined');
   });
 
   testWidgets('settings window', (tester) async {

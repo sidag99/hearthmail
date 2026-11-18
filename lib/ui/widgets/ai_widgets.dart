@@ -145,7 +145,7 @@ class AiCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 12),
       decoration: BoxDecoration(
-        color: c.fill.withValues(alpha: 0.5),
+        color: c.fill,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: c.separator),
       ),

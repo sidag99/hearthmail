@@ -16,7 +16,9 @@ import 'message_view.dart' show openReply, snoozeChoices;
 /// worth knowing and what you can skip, with an action on every row.
 Future<void> showCatchUp(BuildContext context) {
   final state = context.read<AppState>();
-  final all = state.allInboxMessages;
+  // In one account's inbox, catch up on just that account.
+  final account = state.view.kind == ViewKind.folder && state.folderBox?.isInbox == true ? state.folderSession : null;
+  final all = account?.inboxMessages ?? state.allInboxMessages;
   final unread = all.where((m) => !m.isSeen).take(40).toList();
   final source = unread.length >= 3 ? unread : all.take(20).toList();
   if (source.isEmpty || state.ai == null) return Future.value();
@@ -24,7 +26,8 @@ Future<void> showCatchUp(BuildContext context) {
     context: context,
     builder: (_) => ChangeNotifierProvider.value(
       value: state,
-      child: _CatchUpDialog(messages: source, onlyUnread: unread.length >= 3, host: context),
+      child: _CatchUpDialog(
+          messages: source, onlyUnread: unread.length >= 3, host: context, account: account?.config.email),
     ),
   );
 }
@@ -33,7 +36,10 @@ Future<void> showCatchUp(BuildContext context) {
 final _cache = <String, BriefItem>{};
 
 class _CatchUpDialog extends StatefulWidget {
-  const _CatchUpDialog({required this.messages, required this.onlyUnread, required this.host});
+  const _CatchUpDialog({required this.messages, required this.onlyUnread, required this.host, this.account});
+
+  /// Set when catching up on one account only.
+  final String? account;
   final List<MimeMessage> messages;
   final bool onlyUnread;
 
@@ -167,7 +173,8 @@ class _CatchUpDialogState extends State<_CatchUpDialog> {
     final read = _items.length;
     final subtitle = _pending > 0
         ? 'Reading ${widget.messages.length} emails… ($read done)'
-        : '${widget.messages.length} ${widget.onlyUnread ? 'unread' : 'recent'} · '
+        : '${widget.account == null ? '' : '${widget.account} · '}'
+            '${widget.messages.length} ${widget.onlyUnread ? 'unread' : 'recent'} · '
             '${attention.length} need${attention.length == 1 ? 's' : ''} you';
 
     return Dialog(
@@ -268,7 +275,7 @@ class _CatchUpDialogState extends State<_CatchUpDialog> {
 
     return InkWell(
       onTap: () => _open(state, m),
-      hoverColor: c.fill.withValues(alpha: 0.5),
+      hoverColor: c.hover,
       child: Padding(
         padding: EdgeInsets.fromLTRB(20, compact ? 6 : 9, 12, compact ? 6 : 9),
         child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [

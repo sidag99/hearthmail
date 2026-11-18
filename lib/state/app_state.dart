@@ -33,7 +33,7 @@ import '../services/vector_index.dart';
 import 'ai_engines.dart';
 
 /// What the message list is showing.
-enum ViewKind { allInboxes, folder, priority, needsReply, category, search, vip, snoozed, scheduled, followUp, flagged }
+enum ViewKind { allInboxes, combined, folder, priority, needsReply, category, search, vip, snoozed, scheduled, followUp, flagged }
 
 /// Quick filters above the message list.
 enum ListFilter { all, unread, flagged, attachments }
@@ -58,22 +58,25 @@ enum InboxCategory {
 }
 
 class MailView {
-  const MailView.allInboxes() : kind = ViewKind.allInboxes, category = null, accountId = null, path = null;
-  const MailView.folder(String this.accountId, String this.path) : kind = ViewKind.folder, category = null;
-  const MailView.priority() : kind = ViewKind.priority, category = null, accountId = null, path = null;
-  const MailView.needsReply() : kind = ViewKind.needsReply, category = null, accountId = null, path = null;
-  const MailView.category(MailCategory this.category) : kind = ViewKind.category, accountId = null, path = null;
-  const MailView.search() : kind = ViewKind.search, category = null, accountId = null, path = null;
-  const MailView.vip() : kind = ViewKind.vip, category = null, accountId = null, path = null;
-  const MailView.snoozed() : kind = ViewKind.snoozed, category = null, accountId = null, path = null;
-  const MailView.scheduled() : kind = ViewKind.scheduled, category = null, accountId = null, path = null;
-  const MailView.followUp() : kind = ViewKind.followUp, category = null, accountId = null, path = null;
-  const MailView.flagged() : kind = ViewKind.flagged, category = null, accountId = null, path = null;
+  /// One standard mailbox (Drafts, Sent, …) of every account, merged.
+  const MailView.combined(MailboxRole this.role) : kind = ViewKind.combined, category = null, accountId = null, path = null;
+  const MailView.allInboxes() : kind = ViewKind.allInboxes, category = null, accountId = null, path = null, role = null;
+  const MailView.folder(String this.accountId, String this.path) : kind = ViewKind.folder, category = null, role = null;
+  const MailView.priority() : kind = ViewKind.priority, category = null, accountId = null, path = null, role = null;
+  const MailView.needsReply() : kind = ViewKind.needsReply, category = null, accountId = null, path = null, role = null;
+  const MailView.category(MailCategory this.category) : kind = ViewKind.category, accountId = null, path = null, role = null;
+  const MailView.search() : kind = ViewKind.search, category = null, accountId = null, path = null, role = null;
+  const MailView.vip() : kind = ViewKind.vip, category = null, accountId = null, path = null, role = null;
+  const MailView.snoozed() : kind = ViewKind.snoozed, category = null, accountId = null, path = null, role = null;
+  const MailView.scheduled() : kind = ViewKind.scheduled, category = null, accountId = null, path = null, role = null;
+  const MailView.followUp() : kind = ViewKind.followUp, category = null, accountId = null, path = null, role = null;
+  const MailView.flagged() : kind = ViewKind.flagged, category = null, accountId = null, path = null, role = null;
 
   final ViewKind kind;
   final MailCategory? category;
   final String? accountId;
   final String? path;
+  final MailboxRole? role;
 
   /// Views built from every account's inbox.
   bool get isInboxBased =>
@@ -87,9 +90,14 @@ class MailView {
 
   @override
   bool operator ==(Object other) =>
-      other is MailView && other.kind == kind && other.category == category && other.accountId == accountId && other.path == path;
+      other is MailView &&
+      other.kind == kind &&
+      other.category == category &&
+      other.accountId == accountId &&
+      other.path == path &&
+      other.role == role;
   @override
-  int get hashCode => Object.hash(kind, category, accountId, path);
+  int get hashCode => Object.hash(kind, category, accountId, path, role);
 }
 
 enum ConnectionStatus { none, connecting, connected, failed }
@@ -714,6 +722,8 @@ class AppState extends ChangeNotifier {
     if (view.accountId == config.id) view = const MailView.allInboxes();
     if (selected != null && sessionOf(selected!) == s) selected = null;
     searchResults.removeWhere((m) => sessionOf(m) == s);
+    combinedMessages.removeWhere((m) => sessionOf(m) == s);
+    _combinedMore.remove(config.id);
     _mergedCache = null;
     notifyListeners();
   }
@@ -731,8 +741,113 @@ class AppState extends ChangeNotifier {
   bool folderHasMore = false;
   bool folderLoading = false;
 
-  bool get loadingMessages =>
-      view.kind == ViewKind.folder ? folderLoading : sessions.any((s) => s.loading);
+  bool get loadingMessages => switch (view.kind) {
+        ViewKind.folder => folderLoading,
+        ViewKind.combined => combinedLoading,
+        _ => sessions.any((s) => s.loading),
+      };
+
+  // ---- combined mailboxes ("All Sent", "All Drafts", …)
+
+  /// The open combined mailbox's messages, from every account, newest first.
+  List<MimeMessage> combinedMessages = [];
+  bool combinedLoading = false;
+  final _combinedPage = <String, int>{};
+  final _combinedMore = <String, bool>{};
+  int _combinedRequest = 0;
+
+  /// [role]'s mailbox in [s], if it has one.
+  Mailbox? roleBox(AccountSession s, MailboxRole role) =>
+      role == MailboxRole.inbox ? s.inbox : MailService.roleMailbox(s.mailboxes, role);
+
+  /// True for messages in Sent or Drafts, which list recipients instead of
+  /// the sender.
+  bool isOutgoing(MimeMessage m) {
+    final s = sessionOf(m);
+    final box = _box[m];
+    if (s == null || box == null) return false;
+    return box.path == roleBox(s, MailboxRole.sent)?.path || box.path == roleBox(s, MailboxRole.drafts)?.path;
+  }
+
+  /// Accounts that have a mailbox for [role].
+  List<AccountSession> sessionsWith(MailboxRole role) => [for (final s in sessions) if (roleBox(s, role) != null) s];
+
+  Future<void> openCombined(MailboxRole role) async {
+    if (role == MailboxRole.inbox) return setView(const MailView.allInboxes());
+    final request = ++_combinedRequest;
+    combinedMessages = [];
+    _combinedPage.clear();
+    _combinedMore.clear();
+    combinedLoading = true;
+    setView(MailView.combined(role));
+    final errors = <String>[];
+    await Future.wait([
+      for (final s in sessionsWith(role))
+        if (s.connected)
+          () async {
+            final box = roleBox(s, role)!;
+            try {
+              final msgs = await s.service!.fetchPage(box);
+              if (request != _combinedRequest) return;
+              _tag(msgs, s, box);
+              _combinedPage[s.id] = 1;
+              _combinedMore[s.id] = msgs.length >= 40;
+              combinedMessages = [...combinedMessages, ...msgs]..sort((a, b) => _dateOf(b).compareTo(_dateOf(a)));
+              notifyListeners(); // show each account as soon as it arrives
+            } catch (e) {
+              errors.add('${s.config.email}: ${friendlyError(e)}');
+            }
+          }(),
+    ]);
+    if (request != _combinedRequest) return;
+    combinedLoading = false;
+    if (errors.isNotEmpty) toast('Could not load ${role.label} for ${errors.join('; ')}');
+    notifyListeners();
+  }
+
+  Future<void> _loadMoreCombined(MailboxRole role) async {
+    final request = _combinedRequest;
+    combinedLoading = true;
+    notifyListeners();
+    try {
+      await Future.wait([
+        for (final s in sessionsWith(role))
+          if (s.connected && _combinedMore[s.id] == true)
+            () async {
+              final box = roleBox(s, role)!;
+              final page = (_combinedPage[s.id] ?? 1) + 1;
+              final more = await s.service!.fetchPage(box, page: page);
+              if (request != _combinedRequest) return;
+              _tag(more, s, box);
+              _combinedPage[s.id] = page;
+              _combinedMore[s.id] = more.length >= 40;
+              final known = {for (final m in combinedMessages) if (sessionOf(m) == s) m.uid};
+              combinedMessages = [...combinedMessages, ...more.where((m) => !known.contains(m.uid))]
+                ..sort((a, b) => _dateOf(b).compareTo(_dateOf(a)));
+            }(),
+      ]);
+    } catch (e) {
+      toast('Could not load more: ${friendlyError(e)}');
+    } finally {
+      if (request == _combinedRequest) combinedLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Unread count for a combined mailbox (for Drafts: how many there are).
+  int _combinedCount(MailboxRole role) {
+    if (role == MailboxRole.trash || role == MailboxRole.sent) return 0;
+    var n = 0;
+    for (final s in sessions) {
+      final b = roleBox(s, role);
+      if (b != null) n += folderUnread(s, b);
+    }
+    return n;
+  }
+
+  /// Every list of loaded messages that actions must keep up to date.
+  List<List<MimeMessage>> get _messageLists =>
+      [folderMessages, combinedMessages, searchResults, for (final s in sessions) s.inboxMessages];
 
   bool get anyConnecting => sessions.any((s) => s.status == ConnectionStatus.connecting);
 
@@ -875,6 +990,8 @@ class AppState extends ChangeNotifier {
     switch (view.kind) {
       case ViewKind.allInboxes:
         return _inbox;
+      case ViewKind.combined:
+        return combinedMessages;
       case ViewKind.folder:
         return folderBox?.isInbox == true ? folderMessages.where((m) => !_hiddenFromInbox(m)).toList() : folderMessages;
       case ViewKind.search:
@@ -905,6 +1022,8 @@ class AppState extends ChangeNotifier {
         return s != null && s.inbox?.path == v.path ? s.inboxMessages.where((m) => !m.isSeen && !_hiddenFromInbox(m)).length : 0;
       case ViewKind.search:
         return 0;
+      case ViewKind.combined:
+        return _combinedCount(v.role!);
       case ViewKind.snoozed:
         return _viewMessages(v).length;
       case ViewKind.scheduled:
@@ -918,12 +1037,14 @@ class AppState extends ChangeNotifier {
 
   bool get canLoadMore => switch (view.kind) {
         ViewKind.folder => folderHasMore,
+        ViewKind.combined => _combinedMore.values.any((m) => m),
         ViewKind.search => false,
         _ => sessions.any((s) => s.connected && s.inboxHasMore),
       };
 
   Future<void> loadMore() async {
     if (loadingMessages) return;
+    if (view.kind == ViewKind.combined) return _loadMoreCombined(view.role!);
     if (view.kind == ViewKind.folder) {
       final s = folderSession;
       final box = folderBox;
@@ -980,6 +1101,10 @@ class AppState extends ChangeNotifier {
 
   /// Fetches the newest mail and merges anything new at the top.
   Future<void> refresh({bool quiet = false, AccountSession? only}) async {
+    if (view.kind == ViewKind.combined && !quiet) {
+      await openCombined(view.role!);
+      return;
+    }
     if (view.kind == ViewKind.folder && folderBox != null && !folderBox!.isInbox && !quiet) {
       await openFolder(folderSession!, folderBox!);
       return;
@@ -1104,7 +1229,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _replaceMessage(MimeMessage old, MimeMessage updated) {
-    for (final list in [folderMessages, searchResults, for (final s in sessions) s.inboxMessages]) {
+    for (final list in _messageLists) {
       final i = list.indexOf(old);
       if (i >= 0) list[i] = updated;
     }
@@ -1184,7 +1309,7 @@ class AppState extends ChangeNotifier {
     }
     if (removes && gone.isNotEmpty) {
       final goneSet = Set<MimeMessage>.identity()..addAll(gone);
-      for (final list in [folderMessages, searchResults, for (final x in sessions) x.inboxMessages]) {
+      for (final list in _messageLists) {
         list.removeWhere(goneSet.contains);
       }
       _mergedCache = null;
@@ -1831,8 +1956,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Leaves a mailing list: one-click when the sender supports it (RFC 8058),
-  /// otherwise by email or by opening their unsubscribe page.
   /// Addresses on this computer or a local network (never contacted on a
   /// sender's behalf).
   static bool _isPrivateHost(String host) {
@@ -1857,6 +1980,8 @@ class AppState extends ChangeNotifier {
     return u.web?.host;
   }
 
+  /// Leaves a mailing list: one-click when the sender supports it (RFC 8058),
+  /// otherwise by email or by opening their unsubscribe page.
   Future<String> unsubscribe(MimeMessage m) async {
     final u = MailService.unsubscribeOf(m);
     if (u == null) return 'This email has no unsubscribe option.';
@@ -2451,6 +2576,7 @@ class AppState extends ChangeNotifier {
         for (final s in sessions) ...s.inboxMessages,
         for (final s in sessions) ...?_sent[s.id],
         if (!identical(folderMessages, folderSession?.inboxMessages)) ...folderMessages,
+        ...combinedMessages,
         ...searchResults,
       ];
 
@@ -2653,7 +2779,7 @@ class AppState extends ChangeNotifier {
     _deletedDrafts[d] = true;
     try {
       await service.deleteDraft(box, d);
-      for (final list in [folderMessages, searchResults, for (final x in sessions) x.inboxMessages]) {
+      for (final list in _messageLists) {
         list.remove(d);
       }
       _mergedCache = null;

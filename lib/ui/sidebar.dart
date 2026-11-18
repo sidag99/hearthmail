@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../models/account_config.dart';
 import '../models/triage.dart';
+import '../services/mail_service.dart' show MailboxRole;
 import '../state/app_state.dart';
 import 'account_setup_page.dart';
 import 'mac_style.dart';
@@ -65,6 +66,9 @@ class _SidebarState extends State<Sidebar> {
   final _collapsed = <String>{};
   final _expandedAccounts = <String>{};
 
+  /// Open combined mailboxes; All Inboxes starts open, like Mail.
+  final _openGroups = <String>{'role.inbox'};
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -80,6 +84,8 @@ class _SidebarState extends State<Sidebar> {
       int count = 0,
       int indent = 0,
       void Function(List<MimeMessage>)? onDrop,
+      bool? expanded,
+      VoidCallback? onToggle,
     }) =>
         _SidebarRow(
           icon: icon,
@@ -89,6 +95,8 @@ class _SidebarState extends State<Sidebar> {
           count: count,
           indent: indent,
           onDrop: onDrop,
+          expanded: expanded,
+          onToggle: onToggle,
           onTap: () {
             onTap();
             widget.onNavigate?.call();
@@ -98,18 +106,65 @@ class _SidebarState extends State<Sidebar> {
     bool open(String key) => !_collapsed.contains(key);
     void toggle(String key) => setState(() => _collapsed.contains(key) ? _collapsed.remove(key) : _collapsed.add(key));
 
+    // Drop messages on a mailbox to move them (same account only).
+    void Function(List<MimeMessage>)? dropInto(AccountSession s, Mailbox b) => b.isNotSelectable
+        ? null
+        : (ms) {
+            final mine = [for (final m in ms) if (state.sessionOf(m) == s) m];
+            if (mine.length < ms.length) state.toast('Messages can only be moved within the same account.');
+            if (mine.isNotEmpty) state.moveMessages(mine, b);
+          };
+
+    // Like Mail with several accounts: "All Inboxes", "All Sent", … each
+    // opens to one row per account.
+    List<Widget> combined(MailboxRole role, IconData icon) {
+      final owners = state.sessionsWith(role);
+      if (owners.isEmpty) return const [];
+      final key = 'role.${role.name}';
+      final expanded = _openGroups.contains(key);
+      final view = role == MailboxRole.inbox ? const MailView.allInboxes() : MailView.combined(role);
+      return [
+        row(
+          icon: icon,
+          label: role.combinedLabel,
+          selected: state.view == view,
+          count: state.unreadFor(view),
+          expanded: expanded,
+          onToggle: () => setState(() => expanded ? _openGroups.remove(key) : _openGroups.add(key)),
+          onTap: () => state.openCombined(role),
+        ),
+        if (expanded)
+          for (final s in owners)
+            () {
+              final b = state.roleBox(s, role)!;
+              return row(
+                icon: icon,
+                label: s.config.email,
+                indent: 1,
+                onDrop: dropInto(s, b),
+                selected: state.view == MailView.folder(s.id, b.path),
+                count: b.isInbox ? state.unreadFor(MailView.folder(s.id, b.path)) : state.folderUnread(s, b),
+                onTap: () => state.openFolder(s, b),
+              );
+            }(),
+      ];
+    }
+
     final list = ListView(
       padding: EdgeInsets.only(top: useMacWindow ? kToolbarHeight52 : 8, bottom: 12),
       children: [
         _SidebarHeader(text: 'Favorites', open: open('fav'), onToggle: () => toggle('fav')),
         if (open('fav')) ...[
-          row(
-            icon: CupertinoIcons.tray,
-            label: multi ? 'All Inboxes' : 'Inbox',
-            selected: state.view == const MailView.allInboxes(),
-            count: state.unreadFor(const MailView.allInboxes()),
-            onTap: () => state.setView(const MailView.allInboxes()),
-          ),
+          if (multi)
+            ...combined(MailboxRole.inbox, CupertinoIcons.tray)
+          else
+            row(
+              icon: CupertinoIcons.tray,
+              label: 'Inbox',
+              selected: state.view == const MailView.allInboxes(),
+              count: state.unreadFor(const MailView.allInboxes()),
+              onTap: () => state.setView(const MailView.allInboxes()),
+            ),
           if (state.userData.vips.isNotEmpty)
             row(
               icon: CupertinoIcons.star,
@@ -126,6 +181,13 @@ class _SidebarState extends State<Sidebar> {
             count: state.unreadFor(const MailView.flagged()),
             onTap: () => state.setView(const MailView.flagged()),
           ),
+          if (multi) ...[
+            ...combined(MailboxRole.drafts, CupertinoIcons.doc_text),
+            ...combined(MailboxRole.sent, CupertinoIcons.paperplane),
+            ...combined(MailboxRole.archive, CupertinoIcons.archivebox),
+            ...combined(MailboxRole.junk, CupertinoIcons.exclamationmark_octagon),
+            ...combined(MailboxRole.trash, CupertinoIcons.trash),
+          ],
         ],
         _SidebarHeader(
           text: 'Smart Mailboxes',
@@ -203,14 +265,7 @@ class _SidebarState extends State<Sidebar> {
                 label: b.isInbox ? 'Inbox' : b.name,
                 // Subfolders are indented under their parent, like Mail.
                 indent: folderDepth(b, s.mailboxes),
-                // Drop messages here to move them (same account only).
-                onDrop: b.isNotSelectable
-                    ? null
-                    : (ms) {
-                        final mine = [for (final m in ms) if (state.sessionOf(m) == s) m];
-                        if (mine.length < ms.length) state.toast('Messages can only be moved within the same account.');
-                        if (mine.isNotEmpty) state.moveMessages(mine, b);
-                      },
+                onDrop: dropInto(s, b),
                 selected: state.view == MailView.folder(s.id, b.path),
                 count: b.isInbox ? state.unreadFor(MailView.folder(s.id, b.path)) : state.folderUnread(s, b),
                 onTap: () => state.openFolder(s, b),
@@ -325,10 +380,16 @@ class _SidebarRow extends StatelessWidget {
     this.count = 0,
     this.indent = 0,
     this.onDrop,
+    this.expanded,
+    this.onToggle,
   });
 
   /// Nesting depth of a subfolder.
   final int indent;
+
+  /// Shows a disclosure chevron when not null.
+  final bool? expanded;
+  final VoidCallback? onToggle;
 
   /// Accepts messages dragged from the list (folders only).
   final void Function(List<MimeMessage> messages)? onDrop;
@@ -365,7 +426,23 @@ class _SidebarRow extends StatelessWidget {
           child: SizedBox(
             height: 28,
             child: Row(children: [
-              SizedBox(width: 8 + 14.0 * indent),
+              SizedBox(width: 2 + 16.0 * indent),
+              // Room for a disclosure chevron on every row, so icons line up.
+              SizedBox(
+                width: 16,
+                child: expanded == null
+                    ? null
+                    : GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onToggle,
+                        child: SizedBox(
+                          height: 28,
+                          child: Icon(expanded! ? CupertinoIcons.chevron_down : CupertinoIcons.chevron_right,
+                              size: 10, color: c.secondaryLabel),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 4),
               Icon(icon, size: 16, color: iconColor),
               const SizedBox(width: 8),
               Expanded(
