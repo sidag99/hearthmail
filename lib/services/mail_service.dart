@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:io';
 import 'dart:math';
 
@@ -108,12 +109,15 @@ class MailService {
 
   /// Runs [op] after every earlier operation on this account has finished.
   /// If the connection dropped (sleep, Wi-Fi change), reconnects once and retries.
-  Future<T> _serial<T>(Future<T> Function() op) {
+  /// Runs [op] after the previous one. If the connection dropped it
+  /// reconnects and tries once more, unless [retry] is false (sending:
+  /// the server may already have accepted the message).
+  Future<T> _serial<T>(Future<T> Function() op, {bool retry = true}) {
     Future<T> run() async {
       try {
         return await op();
       } catch (e) {
-        if (!_looksLikeConnectionLoss(e)) rethrow;
+        if (!retry || !_looksLikeConnectionLoss(e)) rethrow;
         await _reconnect();
         return op();
       }
@@ -295,6 +299,34 @@ class MailService {
         m.isFlagged = flagged;
       });
 
+  /// Apple Mail's flag colours, stored as the $MailFlagBit0-2 keywords so
+  /// they match Mail on the Mac, iPhone and iPad.
+  static const flagColorNames = ['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple', 'Gray'];
+  static const _flagBits = [r'$MailFlagBit0', r'$MailFlagBit1', r'$MailFlagBit2'];
+
+  /// The flag colour index (0 = red … 6 = gray) of a flagged message.
+  static int flagColorOf(MimeMessage m) {
+    final flags = m.flags ?? const <String>[];
+    var v = 0;
+    for (var i = 0; i < 3; i++) {
+      if (flags.any((f) => f.toLowerCase() == _flagBits[i].toLowerCase())) v |= 1 << i;
+    }
+    return v.clamp(0, 6);
+  }
+
+  /// Flags [m] with a colour.
+  Future<void> setFlagColor(Mailbox box, MimeMessage m, int color) => _serial(() async {
+        await _ensure(box);
+        final seq = MessageSequence.fromMessage(m);
+        final on = [r'\Flagged', for (var i = 0; i < 3; i++) if (color & (1 << i) != 0) _flagBits[i]];
+        final off = [for (var i = 0; i < 3; i++) if (color & (1 << i) == 0) _flagBits[i]];
+        await client.store(seq, on, action: StoreAction.add);
+        if (off.isNotEmpty) await client.store(seq, off, action: StoreAction.remove);
+        final flags = [...?m.flags]..removeWhere((f) => _flagBits.any((b) => b.toLowerCase() == f.toLowerCase()));
+        m.flags = [...flags, ...on.where((f) => !flags.contains(f))];
+        m.isFlagged = true;
+      });
+
   static bool isTrash(Mailbox box) =>
       box.hasFlag(MailboxFlag.trash) || const ['trash', 'deleted items', 'deleted messages', 'bin'].contains(box.name.toLowerCase());
 
@@ -379,6 +411,25 @@ class MailService {
         if (inbox == null || inbox.path == box.path) return null;
         await _ensure(box);
         return _undoMove(await client.moveMessage(m, inbox));
+      });
+
+  /// Current flags of already-loaded messages (read, flagged, colours), so
+  /// changes made on other devices show up. Messages missing from the
+  /// answer were deleted or moved elsewhere. Returns UID -> flags.
+  Future<Map<int, List<String>>> fetchFlags(Mailbox box, List<int> uids) => _serial(() async {
+        if (uids.isEmpty) return <int, List<String>>{};
+        await _ensure(box);
+        final imap = client.lowLevelIncomingMailClient as ImapClient;
+        final out = <int, List<String>>{};
+        // Batches keep each command short.
+        for (var i = 0; i < uids.length; i += 500) {
+          final part = uids.sublist(i, math.min(i + 500, uids.length));
+          final r = await imap.uidFetchMessages(MessageSequence.fromIds(part, isUid: true), '(UID FLAGS)');
+          for (final m in r.messages) {
+            if (m.uid != null) out[m.uid!] = m.flags ?? const [];
+          }
+        }
+        return out;
       });
 
   /// Unread counts for the folders besides the Inbox (IMAP STATUS), for the
@@ -477,7 +528,7 @@ class MailService {
   /// doesn't do that itself. A failure to file the copy never turns a
   /// delivered message into a "failed" send.
   Future<void> sendBuilt(MimeMessage message, {MimeMessage? inReplyTo, Mailbox? inReplyToBox}) async {
-    await _serial(() => client.sendMessage(message, supportUnicode: true, appendToSent: false));
+    await _serial(() => client.sendMessage(message, supportUnicode: true, appendToSent: false), retry: false);
     if (!_serverSavesSent) {
       try {
         await _serial(() async {
@@ -525,7 +576,7 @@ class MailService {
       if (b.hasFlag(MailboxFlag.drafts)) return b;
     }
     for (final b in boxes) {
-      if (b.name.toLowerCase().contains('draft')) return b;
+      if (const {'drafts', 'draft'}.contains(b.name.toLowerCase())) return b;
     }
     return null;
   }
@@ -738,13 +789,34 @@ class MailService {
       .replaceAllMapped(RegExp(r'^#{1,6}\s+', multiLine: true), (_) => '')
       .replaceAllMapped(RegExp(r'\[(.+?)\]\((.+?)\)'), (m) => '${m[1]} (${m[2]})');
 
+  /// Splits `A <a@x>, "Doe, Jo" <j@x>; b@y` into single addresses,
+  /// keeping commas inside quoted names.
+  static List<String> splitAddresses(String text) {
+    final out = <String>[];
+    final buf = StringBuffer();
+    var quoted = false;
+    for (final ch in text.split('')) {
+      if (ch == '"') quoted = !quoted;
+      if (!quoted && (ch == ',' || ch == ';')) {
+        if (buf.toString().trim().isNotEmpty) out.add(buf.toString().trim());
+        buf.clear();
+      } else {
+        buf.write(ch);
+      }
+    }
+    if (buf.toString().trim().isNotEmpty) out.add(buf.toString().trim());
+    return out;
+  }
+
   /// Parses `Ann <ann@x.com>, bob@y.com` into addresses; throws on bad input.
   static List<MailAddress> parseAddresses(String input) {
-    final parts = input
-        .split(RegExp(r'[,;]'))
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty);
-    return [for (final p in parts) MailAddress.parse(p)];
+    final out = <MailAddress>[];
+    for (final p in splitAddresses(input)) {
+      final a = MailAddress.parse(p);
+      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(a.email)) throw FormatException('Not an email address: $p');
+      out.add(a);
+    }
+    return out;
   }
 }
 

@@ -23,20 +23,28 @@ import 'sidebar.dart';
 import 'widgets/ai_widgets.dart';
 
 /// Opens the composer as a reply, optionally with an AI draft.
-void openReply(BuildContext context, MimeMessage m,
-    {bool replyAll = false, String? aiInstruction, String? body}) {
-  Navigator.of(context).push(MaterialPageRoute<void>(
-    builder: (_) => ComposePage(
-      replyTo: m,
-      replyAll: replyAll,
-      aiReplyInstruction: aiInstruction,
-      initialBody: body,
+void openReply(
+  BuildContext context,
+  MimeMessage m, {
+  bool replyAll = false,
+  String? aiInstruction,
+  String? body,
+}) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => ComposePage(
+        replyTo: m,
+        replyAll: replyAll,
+        aiReplyInstruction: aiInstruction,
+        initialBody: body,
+      ),
     ),
-  ));
+  );
 }
 
 void openForward(BuildContext context, MimeMessage m) {
-  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ComposePage(forwardOf: m)));
+  Navigator.of(context)
+      .push(MaterialPageRoute<void>(builder: (_) => ComposePage(forwardOf: m)));
 }
 
 /// Opens a message from a Drafts folder in the composer to keep writing.
@@ -46,7 +54,9 @@ Future<void> openDraft(BuildContext context, MimeMessage m) async {
   try {
     final mail = await state.draftToOutgoing(m);
     if (!context.mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ComposePage(restore: mail)));
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => ComposePage(restore: mail)));
   } catch (e) {
     state.toast('Could not open the draft: ${AppState.friendlyError(e)}');
   }
@@ -57,8 +67,20 @@ List<(String, DateTime)> snoozeChoices([DateTime? from]) {
   final now = from ?? DateTime.now();
   DateTime at(DateTime d, int h) => DateTime(d.year, d.month, d.day, h);
   final tomorrow = now.add(const Duration(days: 1));
-  final saturday = now.add(Duration(days: (DateTime.saturday - now.weekday + 7) % 7 == 0 ? 7 : (DateTime.saturday - now.weekday + 7) % 7));
-  final monday = now.add(Duration(days: (DateTime.monday - now.weekday + 7) % 7 == 0 ? 7 : (DateTime.monday - now.weekday + 7) % 7));
+  final saturday = now.add(
+    Duration(
+      days: (DateTime.saturday - now.weekday + 7) % 7 == 0
+          ? 7
+          : (DateTime.saturday - now.weekday + 7) % 7,
+    ),
+  );
+  final monday = now.add(
+    Duration(
+      days: (DateTime.monday - now.weekday + 7) % 7 == 0
+          ? 7
+          : (DateTime.monday - now.weekday + 7) % 7,
+    ),
+  );
   return [
     ('In 1 hour', now.add(const Duration(hours: 1))),
     if (now.hour < 17) ('This evening', at(now, 19)),
@@ -68,7 +90,10 @@ List<(String, DateTime)> snoozeChoices([DateTime? from]) {
   ];
 }
 
-Future<DateTime?> pickDateTime(BuildContext context, {String help = 'Pick a time'}) async {
+Future<DateTime?> pickDateTime(
+  BuildContext context, {
+  String help = 'Pick a time',
+}) async {
   final now = DateTime.now();
   final d = await showDatePicker(
     context: context,
@@ -78,13 +103,21 @@ Future<DateTime?> pickDateTime(BuildContext context, {String help = 'Pick a time
     helpText: help,
   );
   if (d == null || !context.mounted) return null;
-  final t = await showTimePicker(context: context, initialTime: const TimeOfDay(hour: 8, minute: 0));
+  final t = await showTimePicker(
+    context: context,
+    initialTime: const TimeOfDay(hour: 8, minute: 0),
+  );
   if (t == null) return null;
   return DateTime(d.year, d.month, d.day, t.hour, t.minute);
 }
 
 class MessageView extends StatelessWidget {
-  const MessageView({super.key, this.onBack, this.search, this.leadingInset = 0});
+  const MessageView({
+    super.key,
+    this.onBack,
+    this.search,
+    this.leadingInset = 0,
+  });
 
   final VoidCallback? onBack;
 
@@ -101,29 +134,63 @@ class MessageView extends StatelessWidget {
     final c = MacColors.of(context);
     return ColoredBox(
       color: c.window,
-      child: Column(children: [
-        SizedBox(height: kToolbarHeight52, child: MessageToolbar(message: m, onBack: onBack, search: search, leadingInset: leadingInset)),
-        const Hairline(),
-        Expanded(
-          child: m == null
-              ? Center(child: Text('No Message Selected', style: TextStyle(fontSize: 15, color: c.tertiaryLabel, fontWeight: FontWeight.w500)))
-              : state.loadingSelected
-                  ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
-                  // A new body (incl. AI panels) for each message; the key
-                  // also lets the toolbar's ✨ menu reach it.
-                  : _MessageBody(key: _bodyKey(m), message: m),
-        ),
-      ]),
+      child: Column(
+        children: [
+          SizedBox(
+            height: kToolbarHeight52,
+            child: MessageToolbar(
+              message: m,
+              onBack: onBack,
+              search: search,
+              leadingInset: leadingInset,
+            ),
+          ),
+          const Hairline(),
+          Expanded(
+            child: state.hasMulti
+                ? _MultiSelection(count: state.multi.length)
+                : m == null
+                ? Center(
+                    child: Text(
+                      'No Message Selected',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: c.tertiaryLabel,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  )
+                : state.loadingSelected
+                ? const Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                // A new body (incl. AI panels) for each message; the key
+                // also lets the toolbar's ✨ menu reach it.
+                : _MessageBody(key: _bodyKey(m), message: m),
+          ),
+        ],
+      ),
     );
   }
 }
 
-GlobalObjectKey<_MessageBodyState> _bodyKey(MimeMessage m) => GlobalObjectKey<_MessageBodyState>(m);
+GlobalObjectKey<_MessageBodyState> _bodyKey(MimeMessage m) =>
+    GlobalObjectKey<_MessageBodyState>(m);
 
 /// Mail's toolbar: archive, delete, junk · reply, reply all, forward · flag,
 /// remind · ✨ AI · more, then search.
 class MessageToolbar extends StatelessWidget {
-  const MessageToolbar({super.key, required this.message, this.onBack, this.search, this.leadingInset = 0});
+  const MessageToolbar({
+    super.key,
+    required this.message,
+    this.onBack,
+    this.search,
+    this.leadingInset = 0,
+  });
   final double leadingInset;
   final MimeMessage? message;
   final VoidCallback? onBack;
@@ -134,29 +201,59 @@ class MessageToolbar extends StatelessWidget {
     final state = context.read<AppState>();
     final m = message;
     final c = MacColors.of(context);
-    return LayoutBuilder(builder: (context, box) => _build(context, state, m, c, box.maxWidth - leadingInset));
+    return LayoutBuilder(
+      builder: (context, box) =>
+          _build(context, state, m, c, box.maxWidth - leadingInset),
+    );
   }
 
-  Widget _build(BuildContext context, AppState state, MimeMessage? m, MacColors c, double width) {
+  Widget _build(
+    BuildContext context,
+    AppState state,
+    MimeMessage? m,
+    MacColors c,
+    double width,
+  ) {
     // Fold the less-used buttons into ⋯ and shrink or drop the search
     // field so nothing overflows at any window size.
     final narrow = width < 660;
-    final searchWidth = search == null ? 0.0 : (width - (narrow ? 330 : 440)).clamp(0.0, 230.0);
-    VoidCallback? on(void Function(MimeMessage m) f) => m == null ? null : () => f(m);
+    final searchWidth = search == null
+        ? 0.0
+        : (width - (narrow ? 330 : 440)).clamp(0.0, 230.0);
+    VoidCallback? on(void Function(MimeMessage m) f) =>
+        m == null ? null : () => f(m);
+    // Archive, delete, junk and flag act on every selected message.
+    VoidCallback? onAll(Future<void> Function(List<MimeMessage> ms) f) =>
+        m == null ? null : () => f(state.targets);
 
     Future<void> snoozeMenu(BuildContext bc) async {
       if (m == null) return;
       final box = bc.findRenderObject() as RenderBox?;
-      final at = box?.localToGlobal(Offset(0, box.size.height)) ?? const Offset(400, 60);
+      final at =
+          box?.localToGlobal(Offset(0, box.size.height)) ??
+          const Offset(400, 60);
       final choice = await showMenu<Object>(
         popUpAnimationStyle: AnimationStyle.noAnimation,
         context: context,
         position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx + 1, 0),
         items: [
           for (final (label, time) in snoozeChoices())
-            PopupMenuItem(value: time, height: 32, child: Text('$label  ·  ${DateFormat('E HH:mm').format(time)}')),
-          const PopupMenuItem(value: 'custom', height: 32, child: Text('Pick Date & Time…')),
-          if (state.snoozeOf(m) != null) const PopupMenuItem(value: 'cancel', height: 32, child: Text('Cancel Reminder')),
+            PopupMenuItem(
+              value: time,
+              height: 32,
+              child: Text('$label  ·  ${DateFormat('E HH:mm').format(time)}'),
+            ),
+          const PopupMenuItem(
+            value: 'custom',
+            height: 32,
+            child: Text('Pick Date & Time…'),
+          ),
+          if (state.snoozeOf(m) != null)
+            const PopupMenuItem(
+              value: 'cancel',
+              height: 32,
+              child: Text('Cancel Reminder'),
+            ),
         ],
       );
       if (!context.mounted) return;
@@ -192,17 +289,45 @@ class MessageToolbar extends StatelessWidget {
           }
         },
         itemBuilder: (_) => [
-          const PopupMenuItem(value: 'summary', height: 32, child: Text('Summarize')),
-          const PopupMenuItem(value: 'replies', height: 32, child: Text('Quick Replies')),
-          const PopupMenuItem(value: 'reply', height: 32, child: Text('Reply with AI…')),
+          const PopupMenuItem(
+            value: 'summary',
+            height: 32,
+            child: Text('Summarize'),
+          ),
+          const PopupMenuItem(
+            value: 'replies',
+            height: 32,
+            child: Text('Quick Replies'),
+          ),
+          const PopupMenuItem(
+            value: 'reply',
+            height: 32,
+            child: Text('Reply with AI…'),
+          ),
           const PopupMenuDivider(),
-          PopupMenuItem(value: 'translate', height: 32, child: Text(body?.showingTranslation == true ? 'Show Original' : 'Translate')),
-          const PopupMenuItem(value: 'calendar', height: 32, child: Text('Add to Calendar')),
+          PopupMenuItem(
+            value: 'translate',
+            height: 32,
+            child: Text(
+              body?.showingTranslation == true ? 'Show Original' : 'Translate',
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'calendar',
+            height: 32,
+            child: Text('Add to Calendar'),
+          ),
         ],
         child: SizedBox(
           width: 32,
           height: 28,
-          child: Icon(CupertinoIcons.sparkles, size: 17, color: m != null && state.aiReady ? c.secondaryLabel : c.tertiaryLabel),
+          child: Icon(
+            CupertinoIcons.sparkles,
+            size: 17,
+            color: m != null && state.aiReady
+                ? c.secondaryLabel
+                : c.tertiaryLabel,
+          ),
         ),
       ),
     );
@@ -227,75 +352,194 @@ class MessageToolbar extends StatelessWidget {
             case 'menu':
               // The full right-click menu has everything else.
               final box = context.findRenderObject() as RenderBox?;
-              final at = box == null ? const Offset(600, 60) : box.localToGlobal(Offset(box.size.width - 200, box.size.height));
+              final at = box == null
+                  ? const Offset(600, 60)
+                  : box.localToGlobal(
+                      Offset(box.size.width - 200, box.size.height),
+                    );
               if (context.mounted) await showMessageMenu(context, m, at);
             case 'vip':
               if (sender != null) await state.toggleVip(sender);
             case 'mute':
               await state.muteThread(m);
+            case 'headers':
+              if (context.mounted) showAllHeaders(context, m);
           }
         },
         itemBuilder: (_) {
           final sender = m == null ? null : MailService.senderOf(m)?.email;
           return [
-            if (narrow) const PopupMenuItem(value: 'replyAll', height: 32, child: Text('Reply All')),
-            if (narrow) const PopupMenuItem(value: 'forward', height: 32, child: Text('Forward')),
-            if (narrow) PopupMenuItem(value: 'junk', height: 32, child: Text(m != null && state.isInJunk(m) ? 'Not Junk' : 'Move to Junk')),
-            PopupMenuItem(value: 'read', height: 32, child: Text(m?.isSeen == true ? 'Mark as Unread' : 'Mark as Read')),
+            if (narrow)
+              const PopupMenuItem(
+                value: 'replyAll',
+                height: 32,
+                child: Text('Reply All'),
+              ),
+            if (narrow)
+              const PopupMenuItem(
+                value: 'forward',
+                height: 32,
+                child: Text('Forward'),
+              ),
+            if (narrow)
+              PopupMenuItem(
+                value: 'junk',
+                height: 32,
+                child: Text(
+                  m != null && state.isInJunk(m) ? 'Not Junk' : 'Move to Junk',
+                ),
+              ),
+            PopupMenuItem(
+              value: 'read',
+              height: 32,
+              child: Text(
+                m?.isSeen == true ? 'Mark as Unread' : 'Mark as Read',
+              ),
+            ),
             if (sender != null)
               PopupMenuItem(
-                  value: 'vip', height: 32, child: Text(state.userData.isVip(sender) ? 'Remove from VIPs' : 'Add Sender to VIPs')),
+                value: 'vip',
+                height: 32,
+                child: Text(
+                  state.userData.isVip(sender)
+                      ? 'Remove from VIPs'
+                      : 'Add Sender to VIPs',
+                ),
+              ),
             PopupMenuItem(
-                value: 'mute', height: 32, child: Text(m != null && state.isMuted(m) ? 'Unmute Conversation' : 'Mute Conversation')),
-            const PopupMenuItem(value: 'menu', height: 32, child: Text('Move, Block…')),
+              value: 'mute',
+              height: 32,
+              child: Text(
+                m != null && state.isMuted(m)
+                    ? 'Unmute Conversation'
+                    : 'Mute Conversation',
+              ),
+            ),
+            const PopupMenuItem(value: 'headers', height: 32, child: Text('Show All Headers')),
+            const PopupMenuItem(
+              value: 'menu',
+              height: 32,
+              child: Text('Move, Block…'),
+            ),
           ];
         },
-        child: SizedBox(width: 32, height: 28, child: Icon(CupertinoIcons.ellipsis_circle, size: 17, color: m == null ? c.tertiaryLabel : c.secondaryLabel)),
+        child: SizedBox(
+          width: 32,
+          height: 28,
+          child: Icon(
+            CupertinoIcons.ellipsis_circle,
+            size: 17,
+            color: m == null ? c.tertiaryLabel : c.secondaryLabel,
+          ),
+        ),
       ),
     );
 
     return Padding(
       padding: EdgeInsets.only(left: 8 + leadingInset, right: 8),
-      child: Row(children: [
-        if (onBack != null) ToolButton(icon: CupertinoIcons.chevron_left, tooltip: 'Back', onPressed: onBack),
-        ToolButton(icon: CupertinoIcons.archivebox, tooltip: 'Archive (⌃⌘A)', onPressed: on(state.archiveMessage)),
-        ToolButton(icon: CupertinoIcons.trash, tooltip: 'Delete (⌘⌫)', onPressed: on(state.deleteMessage)),
-        if (!narrow)
+      child: Row(
+        children: [
+          if (onBack != null)
+            ToolButton(
+              icon: CupertinoIcons.chevron_left,
+              tooltip: 'Back',
+              onPressed: onBack,
+            ),
           ToolButton(
-            icon: m != null && state.isInJunk(m) ? CupertinoIcons.tray_arrow_up : CupertinoIcons.xmark_octagon,
-            tooltip: m != null && state.isInJunk(m) ? 'Not Junk (⇧⌘J)' : 'Move to Junk (⇧⌘J)',
-            onPressed: on(state.junkMessage),
+            icon: CupertinoIcons.archivebox,
+            tooltip: 'Archive (⌃⌘A)',
+            onPressed: onAll(state.archiveMessages),
           ),
-        const SizedBox(width: 10),
-        ToolButton(icon: CupertinoIcons.arrowshape_turn_up_left, tooltip: 'Reply (⌘R)', onPressed: on((m) => openReply(context, m))),
-        if (!narrow)
           ToolButton(
-            icon: CupertinoIcons.arrowshape_turn_up_left_2,
-            tooltip: 'Reply All (⇧⌘R)',
-            onPressed: on((m) => openReply(context, m, replyAll: true)),
+            icon: CupertinoIcons.trash,
+            tooltip: 'Delete (⌘⌫)',
+            onPressed: onAll(state.deleteMessages),
           ),
-        if (!narrow)
-          ToolButton(icon: CupertinoIcons.arrowshape_turn_up_right, tooltip: 'Forward (⇧⌘F)', onPressed: on((m) => openForward(context, m))),
-        const SizedBox(width: 10),
-        ToolButton(
-          icon: m?.isFlagged == true ? CupertinoIcons.flag_fill : CupertinoIcons.flag,
-          color: m?.isFlagged == true ? const Color(0xFFFF9500) : null,
-          tooltip: 'Flag (⇧⌘L)',
-          onPressed: on(state.toggleFlag),
-        ),
-        Builder(
-          builder: (bc) => ToolButton(
-            icon: CupertinoIcons.alarm,
-            color: m != null && state.snoozeOf(m) != null ? MacColors.of(context).accent : null,
-            tooltip: 'Remind Me',
-            onPressed: m == null ? null : () => snoozeMenu(bc),
+          if (!narrow)
+            ToolButton(
+              icon: m != null && state.isInJunk(m)
+                  ? CupertinoIcons.tray_arrow_up
+                  : CupertinoIcons.xmark_octagon,
+              tooltip: m != null && state.isInJunk(m)
+                  ? 'Not Junk (⇧⌘J)'
+                  : 'Move to Junk (⇧⌘J)',
+              onPressed: onAll(state.junkMessages),
+            ),
+          const SizedBox(width: 10),
+          ToolButton(
+            icon: CupertinoIcons.arrowshape_turn_up_left,
+            tooltip: 'Reply (⌘R)',
+            onPressed: on((m) => openReply(context, m)),
           ),
-        ),
-        aiMenu,
-        more,
-        const Spacer(),
-        if (searchWidth >= 120) SizedBox(width: searchWidth, child: search),
-      ]),
+          if (!narrow)
+            ToolButton(
+              icon: CupertinoIcons.arrowshape_turn_up_left_2,
+              tooltip: 'Reply All (⇧⌘R)',
+              onPressed: on((m) => openReply(context, m, replyAll: true)),
+            ),
+          if (!narrow)
+            ToolButton(
+              icon: CupertinoIcons.arrowshape_turn_up_right,
+              tooltip: 'Forward (⇧⌘F)',
+              onPressed: on((m) => openForward(context, m)),
+            ),
+          const SizedBox(width: 10),
+          ToolButton(
+            icon: m?.isFlagged == true
+                ? CupertinoIcons.flag_fill
+                : CupertinoIcons.flag,
+            color: m?.isFlagged == true ? kFlagColors[MailService.flagColorOf(m!)] : null,
+            tooltip: 'Flag (⇧⌘L)',
+            onPressed: onAll(
+              (ms) => state.setFlagged(ms, !ms.every((x) => x.isFlagged)),
+            ),
+          ),
+          // Mail's flag colour menu.
+          ToolbarItem(
+            child: PopupMenuButton<int>(
+              popUpAnimationStyle: AnimationStyle.noAnimation,
+              tooltip: 'Flag Colour',
+              enabled: m != null,
+              onSelected: (i) => i < 0
+                  ? state.setFlagged(state.targets, false)
+                  : state.setFlagColor(state.targets, i),
+              itemBuilder: (_) => [
+                for (var i = 0; i < MailService.flagColorNames.length; i++)
+                  PopupMenuItem(
+                    value: i,
+                    height: 30,
+                    child: Row(children: [
+                      Icon(CupertinoIcons.flag_fill, size: 13, color: kFlagColors[i]),
+                      const SizedBox(width: 8),
+                      Text(MailService.flagColorNames[i]),
+                    ]),
+                  ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(value: -1, height: 30, child: Text('Clear Flag')),
+              ],
+              child: SizedBox(
+                width: 14,
+                height: 28,
+                child: Icon(CupertinoIcons.chevron_down, size: 9, color: MacColors.of(context).secondaryLabel),
+              ),
+            ),
+          ),
+          Builder(
+            builder: (bc) => ToolButton(
+              icon: CupertinoIcons.alarm,
+              color: m != null && state.snoozeOf(m) != null
+                  ? MacColors.of(context).accent
+                  : null,
+              tooltip: 'Remind Me',
+              onPressed: m == null ? null : () => snoozeMenu(bc),
+            ),
+          ),
+          aiMenu,
+          more,
+          const Spacer(),
+          if (searchWidth >= 120) SizedBox(width: searchWidth, child: search),
+        ],
+      ),
     );
   }
 }
@@ -343,9 +587,13 @@ class _MessageBodyState extends State<_MessageBody> {
     final ai = state.ai;
     if (ai == null) return;
     final text = MailService.bodyText(widget.message);
-    final lang = await ai.detectLanguage('${MailService.subjectOf(widget.message)}\n$text');
+    final lang = await ai.detectLanguage(
+      '${MailService.subjectOf(widget.message)}\n$text',
+    );
     if (!mounted || lang == null) return;
-    if (lang.toLowerCase() != state.settings.myLanguage.toLowerCase()) setState(() => _language = lang);
+    if (lang.toLowerCase() != state.settings.myLanguage.toLowerCase()) {
+      setState(() => _language = lang);
+    }
   }
 
   void _translate(AppState state) {
@@ -363,22 +611,30 @@ class _MessageBodyState extends State<_MessageBody> {
     });
     final m = widget.message;
     _translateSub = ai
-        .translate('${MailService.subjectOf(m)}\n\n${MailService.bodyText(m)}', state.settings.myLanguage, source: _language)
-        .listen((chunk) {
-      buf.write(chunk);
-      if (mounted) setState(() => _translated = buf.toString());
-    }, onError: (Object e) {
-      state.toast('Translation failed: $e');
-      if (mounted) {
-        setState(() {
-          _translating = false;
-          _translated = null;
-          _showTranslation = false;
-        });
-      }
-    }, onDone: () {
-      if (mounted) setState(() => _translating = false);
-    });
+        .translate(
+          '${MailService.subjectOf(m)}\n\n${MailService.bodyText(m)}',
+          state.settings.myLanguage,
+          source: _language,
+        )
+        .listen(
+          (chunk) {
+            buf.write(chunk);
+            if (mounted) setState(() => _translated = buf.toString());
+          },
+          onError: (Object e) {
+            state.toast('Translation failed: $e');
+            if (mounted) {
+              setState(() {
+                _translating = false;
+                _translated = null;
+                _showTranslation = false;
+              });
+            }
+          },
+          onDone: () {
+            if (mounted) setState(() => _translating = false);
+          },
+        );
   }
 
   Future<void> _addToCalendar(AppState state) async {
@@ -392,23 +648,43 @@ class _MessageBodyState extends State<_MessageBody> {
         state.toast('No date or event found in this email.');
         return;
       }
-      final fmt = event.allDay ? DateFormat.yMMMEd() : DateFormat.yMMMEd().add_jm();
+      final fmt = event.allDay
+          ? DateFormat.yMMMEd()
+          : DateFormat.yMMMEd().add_jm();
       final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
           title: const Text('Add to Calendar?'),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(event.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            Text(fmt.format(event.start) + (event.end == null ? '' : ' – ${fmt.format(event.end!)}')),
-            if (event.location.isNotEmpty) Text(event.location),
-            const SizedBox(height: 10),
-            Text('Found by AI: check the details. Calendar opens so you can confirm.',
-                style: Theme.of(c).textTheme.bodySmall),
-          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                event.title,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                fmt.format(event.start) +
+                    (event.end == null ? '' : ' – ${fmt.format(event.end!)}'),
+              ),
+              if (event.location.isNotEmpty) Text(event.location),
+              const SizedBox(height: 10),
+              Text(
+                'Found by AI: check the details. Calendar opens so you can confirm.',
+                style: Theme.of(c).textTheme.bodySmall,
+              ),
+            ],
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Open in Calendar')),
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Open in Calendar'),
+            ),
           ],
         ),
       );
@@ -424,11 +700,22 @@ class _MessageBodyState extends State<_MessageBody> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('Unsubscribe from ${MailService.senderName(widget.message)}?'),
-        content: const Text('Hearthmail will ask the sender to stop sending you these emails.'),
+        title: Text(
+          'Unsubscribe from ${MailService.senderName(widget.message)}?',
+        ),
+        content: Text(
+          'Hearthmail will ask the sender to stop sending you these emails'
+          '${state.unsubscribeTarget(widget.message) == null ? '' : ' (via ${state.unsubscribeTarget(widget.message)})'}.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Unsubscribe')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Unsubscribe'),
+          ),
         ],
       ),
     );
@@ -449,11 +736,21 @@ class _MessageBodyState extends State<_MessageBody> {
     _docKey = key;
     final html = m.decodeTextHtmlPart();
     if (_showTranslation && _translated != null) {
-      _doc = EmailDocument.fromPlain(_translated!.isEmpty ? 'Translating…' : _translated!, dark: dark);
+      _doc = EmailDocument.fromPlain(
+        _translated!.isEmpty ? 'Translating…' : _translated!,
+        dark: dark,
+      );
     } else if (html != null && html.trim().isNotEmpty) {
-      _doc = EmailDocument.fromHtml(html, allowRemote: allowImages, inlineImage: (cid) => _inline(m, cid));
+      _doc = EmailDocument.fromHtml(
+        html,
+        allowRemote: allowImages,
+        inlineImage: (cid) => _inline(m, cid),
+      );
     } else {
-      _doc = EmailDocument.fromPlain(m.decodeTextPlainPart() ?? MailService.bodyText(m), dark: dark);
+      _doc = EmailDocument.fromPlain(
+        m.decodeTextPlainPart() ?? MailService.bodyText(m),
+        dark: dark,
+      );
     }
     return _doc!;
   }
@@ -484,7 +781,9 @@ class _MessageBodyState extends State<_MessageBody> {
     });
   }
 
-  void translateNow() => _showTranslation ? setState(() => _showTranslation = false) : _translate(context.read<AppState>());
+  void translateNow() => _showTranslation
+      ? setState(() => _showTranslation = false)
+      : _translate(context.read<AppState>());
   Future<void> addToCalendarNow() => _addToCalendar(context.read<AppState>());
   bool get showingTranslation => _showTranslation;
 
@@ -501,18 +800,28 @@ class _MessageBodyState extends State<_MessageBody> {
             autofocus: true,
             minLines: 2,
             maxLines: 4,
-            decoration: const InputDecoration(hintText: 'What should the reply say? e.g. "yes, but Thursday works better"'),
+            decoration: const InputDecoration(
+              hintText: 'What should the reply say? e.g. "yes, but Thursday works better"',
+            ),
             onSubmitted: (v) => Navigator.pop(d, v),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(d, c.text), child: const Text('Write Reply')),
+          TextButton(
+            onPressed: () => Navigator.pop(d),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(d, c.text),
+            child: const Text('Write Reply'),
+          ),
         ],
       ),
     );
     c.dispose();
-    if (text != null && mounted) openReply(context, widget.message, aiInstruction: text);
+    if (text != null && mounted) {
+      openReply(context, widget.message, aiInstruction: text);
+    }
   }
 
   @override
@@ -526,191 +835,342 @@ class _MessageBodyState extends State<_MessageBody> {
     final date = MailService.dateOf(m);
     final allowImages = _loadImages || state.settings.loadRemoteImages;
     final doc = _document(m, allowImages, dark);
-    final isHtml = !(_showTranslation && _translated != null) && (m.decodeTextHtmlPart()?.trim().isNotEmpty ?? false);
+    final isHtml =
+        !(_showTranslation && _translated != null) &&
+        (m.decodeTextHtmlPart()?.trim().isNotEmpty ?? false);
     final triage = state.triageOf(m);
     final owner = state.sessions.length > 1 ? state.sessionOf(m) : null;
-    final suspicion = MailService.suspicionOf(m) ??
-        (triage?.suspicious == true ? 'The AI thinks this email may be a phishing or scam attempt.' : null);
+    final suspicion =
+        MailService.suspicionOf(m) ??
+        (triage?.suspicious == true
+            ? 'The AI thinks this email may be a phishing or scam attempt.'
+            : null);
     final unsub = MailService.unsubscribeOf(m);
     final snooze = state.snoozeOf(m);
     final vip = sender != null && state.userData.isVip(sender.email);
-    final attachments = m.findContentInfo(disposition: ContentDisposition.attachment);
+    final attachments = m.findContentInfo(
+      disposition: ContentDisposition.attachment,
+    );
 
     // Mail-style notice line: small icon, text, blue link on the right.
-    Widget notice(IconData icon, String text, {Color? color, String? action, VoidCallback? onAction}) => Column(children: [
-          const Hairline(),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Row(children: [
+    Widget notice(
+      IconData icon,
+      String text, {
+      Color? color,
+      String? action,
+      VoidCallback? onAction,
+    }) => Column(
+      children: [
+        const Hairline(),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            children: [
               Icon(icon, size: 14, color: color ?? c.secondaryLabel),
               const SizedBox(width: 8),
-              Expanded(child: Text(text, style: TextStyle(fontSize: 12, color: color ?? c.secondaryLabel))),
-              if (action != null) TextButton(onPressed: onAction, child: Text(action)),
-            ]),
-          ),
-        ]);
-
-    final header = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        InitialsAvatar(MailService.senderName(m), size: 40),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Flexible(
-                child: Tooltip(
-                  message: sender?.email ?? '',
-                  child: SelectableText(MailService.senderName(m),
-                      maxLines: 1, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.label)),
-                ),
-              ),
-              if (sender != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: InkWell(
-                    onTap: () => state.toggleVip(sender.email),
-                    child: Tooltip(
-                      message: vip ? 'VIP · click to remove' : 'Add to VIPs',
-                      child: Icon(vip ? CupertinoIcons.star_fill : CupertinoIcons.star,
-                          size: 13, color: vip ? c.secondaryLabel : c.tertiaryLabel),
-                    ),
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: color ?? c.secondaryLabel,
                   ),
                 ),
-            ]),
-            const SizedBox(height: 2),
-            SelectableText(MailService.subjectOf(m), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.label)),
-            const SizedBox(height: 2),
-            Text.rich(
-              TextSpan(children: [
-                TextSpan(text: 'To: ', style: TextStyle(color: c.secondaryLabel)),
-                TextSpan(text: MailService.displayList(m.to), style: TextStyle(color: c.label)),
-                if ((m.cc ?? []).isNotEmpty) ...[
-                  TextSpan(text: '   Cc: ', style: TextStyle(color: c.secondaryLabel)),
-                  TextSpan(text: MailService.displayList(m.cc), style: TextStyle(color: c.label)),
+              ),
+              if (action != null)
+                TextButton(onPressed: onAction, child: Text(action)),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    final header = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InitialsAvatar(MailService.senderName(m), size: 40),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Tooltip(
+                          message: sender?.email ?? '',
+                          child: SelectableText(
+                            MailService.senderName(m),
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: c.label,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (sender != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: InkWell(
+                            onTap: () => state.toggleVip(sender.email),
+                            child: Tooltip(
+                              message: vip
+                                  ? 'VIP · click to remove'
+                                  : 'Add to VIPs',
+                              child: Icon(
+                                vip
+                                    ? CupertinoIcons.star_fill
+                                    : CupertinoIcons.star,
+                                size: 13,
+                                color: vip ? c.secondaryLabel : c.tertiaryLabel,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  SelectableText(
+                    MailService.subjectOf(m),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: c.label,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'To: ',
+                          style: TextStyle(color: c.secondaryLabel),
+                        ),
+                        TextSpan(
+                          text: MailService.displayList(m.to),
+                          style: TextStyle(color: c.label),
+                        ),
+                        if ((m.cc ?? []).isNotEmpty) ...[
+                          TextSpan(
+                            text: '   Cc: ',
+                            style: TextStyle(color: c.secondaryLabel),
+                          ),
+                          TextSpan(
+                            text: MailService.displayList(m.cc),
+                            style: TextStyle(color: c.label),
+                          ),
+                        ],
+                      ],
+                    ),
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
-              ]),
-              style: const TextStyle(fontSize: 12),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ]),
-        ),
-        const SizedBox(width: 8),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          if (date != null)
-            Text(DateFormat.yMMMd().add_jm().format(date.toLocal()), style: TextStyle(fontSize: 12, color: c.secondaryLabel)),
-          if (owner != null)
-            Padding(padding: const EdgeInsets.only(top: 3), child: AccountBadge(config: owner.config, index: state.indexOf(owner))),
-          if (state.aiReady && !_showSummary)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: _Pill(icon: CupertinoIcons.sparkles, label: 'Summarize', onTap: showSummary),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (date != null)
+                  Text(
+                    DateFormat.yMMMd().add_jm().format(date.toLocal()),
+                    style: TextStyle(fontSize: 12, color: c.secondaryLabel),
+                  ),
+                if (owner != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: AccountBadge(
+                      config: owner.config,
+                      index: state.indexOf(owner),
+                    ),
+                  ),
+                if (state.aiReady && !_showSummary)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _Pill(
+                      icon: CupertinoIcons.sparkles,
+                      label: 'Summarize',
+                      onTap: showSummary,
+                    ),
+                  ),
+              ],
             ),
-        ]),
-      ]),
-      const SizedBox(height: 10),
-      if (state.isDraft(m))
-        notice(CupertinoIcons.pencil, 'This is a draft.', color: c.accent, action: 'Edit Draft', onAction: () => openDraft(context, m)),
-      if (suspicion != null)
-        notice(CupertinoIcons.exclamationmark_shield, 'Be careful: $suspicion Don\'t click links or share passwords or codes.',
-            color: const Color(0xFFFF3B30)),
-      if (snooze != null && !snooze.isDue)
-        notice(CupertinoIcons.alarm, 'Reminder set for ${DateFormat('E d MMM, HH:mm').format(snooze.until)}',
-            action: 'Cancel', onAction: () => state.unsnooze(m)),
-      if (_language != null || _showTranslation)
-        notice(
-          CupertinoIcons.globe,
-          _showTranslation
-              ? (_translating ? 'Translating from ${_language ?? 'the original'}…' : 'Translated from ${_language ?? 'the original'}')
-              : 'This message is in $_language.',
-          action: _translating ? null : (_showTranslation ? 'Show Original' : 'Translate to ${state.settings.myLanguage}'),
-          onAction: translateNow,
+          ],
         ),
-      if (unsub != null)
-        notice(CupertinoIcons.envelope, 'This message is from a mailing list.',
-            action: _unsubscribing ? 'Unsubscribing…' : 'Unsubscribe', onAction: _unsubscribing ? null : () => _unsubscribe(state)),
-      if (isHtml && !allowImages && doc.blockedImages > 0)
-        notice(CupertinoIcons.photo, 'This message contains remote content.',
-            action: 'Load Remote Content', onAction: () => setState(() => _loadImages = true)),
-      if (triage != null && triage.needsReply && !m.isAnswered && _quickReplies == null && state.aiReady)
-        notice(CupertinoIcons.arrowshape_turn_up_left, 'This message looks like it is waiting for your reply.',
-            color: c.accent, action: 'Quick Replies', onAction: showQuickReplies),
-      if (_showSummary) ...[
-        const SizedBox(height: 6),
-        AiCard(
-          title: 'Summary',
-          onClose: () => setState(() => _showSummary = false),
-          child: AiStreamView(placeholder: 'Summarizing…', start: () => state.ai!.summarize(state.contentOf(m))),
-        ),
+        const SizedBox(height: 10),
+        if (state.isDraft(m))
+          notice(
+            CupertinoIcons.pencil,
+            'This is a draft.',
+            color: c.accent,
+            action: 'Edit Draft',
+            onAction: () => openDraft(context, m),
+          ),
+        if (suspicion != null)
+          notice(
+            CupertinoIcons.exclamationmark_shield,
+            'Be careful: $suspicion Don\'t click links or share passwords or codes.',
+            color: const Color(0xFFFF3B30),
+          ),
+        if (snooze != null && !snooze.isDue)
+          notice(
+            CupertinoIcons.alarm,
+            'Reminder set for ${DateFormat('E d MMM, HH:mm').format(snooze.until)}',
+            action: 'Cancel',
+            onAction: () => state.unsnooze(m),
+          ),
+        if (_language != null || _showTranslation)
+          notice(
+            CupertinoIcons.globe,
+            _showTranslation
+                ? (_translating
+                      ? 'Translating from ${_language ?? 'the original'}…'
+                      : 'Translated from ${_language ?? 'the original'}')
+                : 'This message is in $_language.',
+            action: _translating
+                ? null
+                : (_showTranslation
+                      ? 'Show Original'
+                      : 'Translate to ${state.settings.myLanguage}'),
+            onAction: translateNow,
+          ),
+        if (unsub != null)
+          notice(
+            CupertinoIcons.envelope,
+            'This message is from a mailing list.',
+            action: _unsubscribing ? 'Unsubscribing…' : 'Unsubscribe',
+            onAction: _unsubscribing ? null : () => _unsubscribe(state),
+          ),
+        if (isHtml && !allowImages && doc.blockedImages > 0)
+          notice(
+            CupertinoIcons.photo,
+            'This message contains remote content.',
+            action: 'Load Remote Content',
+            onAction: () => setState(() => _loadImages = true),
+          ),
+        if (triage != null &&
+            triage.needsReply &&
+            !m.isAnswered &&
+            _quickReplies == null &&
+            state.aiReady)
+          notice(
+            CupertinoIcons.arrowshape_turn_up_left,
+            'This message looks like it is waiting for your reply.',
+            color: c.accent,
+            action: 'Quick Replies',
+            onAction: showQuickReplies,
+          ),
+        if (_showSummary) ...[
+          const SizedBox(height: 6),
+          AiCard(
+            title: 'Summary',
+            onClose: () => setState(() => _showSummary = false),
+            child: AiStreamView(
+              placeholder: 'Summarizing…',
+              start: () => state.ai!.summarize(state.contentOf(m)),
+            ),
+          ),
+        ],
+        if (_quickReplies != null) ...[
+          const SizedBox(height: 6),
+          _quickReplyCard(context, m),
+        ],
+        if (_findingEvent)
+          notice(
+            CupertinoIcons.calendar_badge_plus,
+            'Looking for a date in this message…',
+          ),
+        InviteCard(m),
+        if (attachments.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final info in attachments)
+                _AttachmentChip(message: m, info: info),
+            ],
+          ),
+        ],
+        // Earlier messages in this conversation, newest last, like Mail.
+        ConversationHistory(m),
+        const SizedBox(height: 10),
       ],
-      if (_quickReplies != null) ...[
-        const SizedBox(height: 6),
-        _quickReplyCard(context, m),
-      ],
-      if (_findingEvent)
-        notice(CupertinoIcons.calendar_badge_plus, 'Looking for a date in this message…'),
-      InviteCard(m),
-      if (attachments.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 6, children: [
-          for (final info in attachments) _AttachmentChip(message: m, info: info),
-        ]),
-      ],
-      // Earlier messages in this conversation, newest last, like Mail.
-      ConversationHistory(m),
-      const SizedBox(height: 10),
-    ]);
+    );
 
     final bodyBg = isHtml || !dark ? Colors.white : const Color(0xFF1F1F22);
     // One page, like Mail: the header sits in space left above the email
     // and slides up as the email scrolls; scrolling over it scrolls the email.
     final offset = _scrollY.clamp(0.0, _headerHeight);
     return ClipRect(
-      child: Stack(children: [
-        // HTML email is designed for a white page, so it keeps one even in
-        // dark mode. Plain text follows the app theme.
-        Positioned.fill(
-          child: ColoredBox(
-            color: bodyBg,
-            child: EmailWebView(
-              key: _webKey,
-              html: doc.html,
-              background: bodyBg,
-              topInset: _headerHeight,
-              onScroll: (y) {
-                if (mounted && (y.clamp(0.0, _headerHeight) != _scrollY.clamp(0.0, _headerHeight))) {
-                  setState(() => _scrollY = y);
-                } else {
-                  _scrollY = y;
-                }
-              },
-            ),
-          ),
-        ),
-        Positioned(
-          top: -offset,
-          left: 0,
-          right: 0,
-          child: Listener(
-            onPointerSignal: (e) {
-              if (e is PointerScrollEvent) _webKey.currentState?.scrollBy(e.scrollDelta.dy);
-            },
-            onPointerPanZoomUpdate: (e) => _webKey.currentState?.scrollBy(-e.localPanDelta.dy),
-            child: _MeasureHeight(
-              onChange: (h) {
-                if (mounted && (h - _headerHeight).abs() > 0.5) setState(() => _headerHeight = h);
-              },
-              child: ColoredBox(
-                color: MacColors.of(context).window,
-                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: header),
-                  const Hairline(),
-                ]),
+      child: Stack(
+        children: [
+          // HTML email is designed for a white page, so it keeps one even in
+          // dark mode. Plain text follows the app theme.
+          Positioned.fill(
+            child: ColoredBox(
+              color: bodyBg,
+              child: EmailWebView(
+                key: _webKey,
+                html: doc.html,
+                background: bodyBg,
+                topInset: _headerHeight,
+                onScroll: (y) {
+                  if (mounted &&
+                      (y.clamp(0.0, _headerHeight) !=
+                          _scrollY.clamp(0.0, _headerHeight))) {
+                    setState(() => _scrollY = y);
+                  } else {
+                    _scrollY = y;
+                  }
+                },
               ),
             ),
           ),
-        ),
-      ]),
+          Positioned(
+            top: -offset,
+            left: 0,
+            right: 0,
+            child: Listener(
+              onPointerSignal: (e) {
+                if (e is PointerScrollEvent) {
+                  _webKey.currentState?.scrollBy(e.scrollDelta.dy);
+                }
+              },
+              onPointerPanZoomUpdate: (e) =>
+                  _webKey.currentState?.scrollBy(-e.localPanDelta.dy),
+              child: _MeasureHeight(
+                onChange: (h) {
+                  if (mounted && (h - _headerHeight).abs() > 0.5) {
+                    setState(() => _headerHeight = h);
+                  }
+                },
+                child: ColoredBox(
+                  color: MacColors.of(context).window,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: header,
+                      ),
+                      const Hairline(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -722,27 +1182,39 @@ class _MessageBodyState extends State<_MessageBody> {
         future: _quickReplies,
         builder: (context, snap) {
           if (snap.hasError) {
-            return Text('${snap.error}', style: TextStyle(color: Theme.of(context).colorScheme.error));
+            return Text(
+              '${snap.error}',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            );
           }
           if (!snap.hasData) {
             return const LinearProgressIndicator();
           }
-          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            for (final r in snap.data!)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    alignment: Alignment.centerLeft,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final r in snap.data!)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                    ),
+                    // Expand the short reply into a full email, keeping its meaning.
+                    onPressed: () => openReply(context, m, aiInstruction: r),
+                    child: Text(r, textAlign: TextAlign.left),
                   ),
-                  // Expand the short reply into a full email, keeping its meaning.
-                  onPressed: () => openReply(context, m, aiInstruction: r),
-                  child: Text(r, textAlign: TextAlign.left),
                 ),
+              Text(
+                'Click one to turn it into a full reply you can edit.',
+                style: Theme.of(context).textTheme.labelSmall,
               ),
-            Text('Click one to turn it into a full reply you can edit.', style: Theme.of(context).textTheme.labelSmall),
-          ]);
+            ],
+          );
         },
       ),
     );
@@ -764,12 +1236,25 @@ class _Pill extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(color: c.fill, borderRadius: BorderRadius.circular(12)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 12, color: c.accent),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.label)),
-        ]),
+        decoration: BoxDecoration(
+          color: c.fill,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: c.accent),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: c.label,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -787,14 +1272,68 @@ class _AttachmentChip extends StatefulWidget {
 class _AttachmentChipState extends State<_AttachmentChip> {
   bool _busy = false;
 
-  Future<void> _run(bool open) async {
+  Future<void> _quickLook() async {
     final state = context.read<AppState>();
     setState(() => _busy = true);
     try {
-      final f = await state.saveAttachment(widget.message, widget.info, open: open);
+      await state.quickLook(widget.message, widget.info);
+    } catch (e) {
+      state.toast('Could not preview the attachment: ${AppState.friendlyError(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _menu(Offset at) async {
+    final choice = await showMenu<String>(
+      context: context,
+      popUpAnimationStyle: AnimationStyle.noAnimation,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx + 1, at.dy + 1),
+      items: const [
+        PopupMenuItem(value: 'look', height: 30, child: Text('Quick Look')),
+        PopupMenuItem(value: 'open', height: 30, child: Text('Open')),
+        PopupMenuItem(value: 'save', height: 30, child: Text('Save to Downloads')),
+      ],
+    );
+    switch (choice) {
+      case 'look':
+        await _quickLook();
+      case 'open':
+        await _run(true);
+      case 'save':
+        await _run(false);
+    }
+  }
+
+  Future<void> _run(bool open) async {
+    final state = context.read<AppState>();
+    if (open && AppState.isRiskyAttachment(widget.info.fileName)) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text('Open "${widget.info.fileName}"?'),
+          content: const Text('This kind of file can run programs on your Mac. Only open it if you trust the sender '
+              'and were expecting it. macOS will check it before it runs.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Open')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    setState(() => _busy = true);
+    try {
+      final f = await state.saveAttachment(
+        widget.message,
+        widget.info,
+        open: open,
+      );
       if (!open) state.toast('Saved to ${f.path}');
     } catch (e) {
-      state.toast('Could not ${open ? 'open' : 'save'} the attachment: ${AppState.friendlyError(e)}');
+      state.toast(
+        'Could not ${open ? 'open' : 'save'} the attachment: ${AppState.friendlyError(e)}',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -803,14 +1342,27 @@ class _AttachmentChipState extends State<_AttachmentChip> {
   @override
   Widget build(BuildContext context) {
     final size = widget.info.size;
-    final label = '${widget.info.fileName ?? 'attachment'}${size == null ? '' : '  ·  ${_size(size)}'}';
+    final label =
+        '${widget.info.fileName ?? 'attachment'}${size == null ? '' : '  ·  ${_size(size)}'}';
     return InputChip(
       avatar: _busy
-          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-          : Icon(widget.info.isImage ? Icons.image_outlined : Icons.attach_file, size: 16),
-      label: Text(label),
-      tooltip: 'Click to open',
-      onPressed: _busy ? null : () => _run(true),
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(
+              widget.info.isImage ? Icons.image_outlined : Icons.attach_file,
+              size: 16,
+            ),
+      label: GestureDetector(
+        // Like Mail: double-click opens, right-click for more.
+        onDoubleTap: _busy ? null : () => _run(true),
+        onSecondaryTapDown: _busy ? null : (d) => _menu(d.globalPosition),
+        child: Text(label),
+      ),
+      tooltip: 'Click for Quick Look · double-click to open',
+      onPressed: _busy ? null : _quickLook,
       deleteIcon: const Icon(Icons.download, size: 16),
       deleteButtonTooltipMessage: 'Save to Downloads',
       onDeleted: _busy ? null : () => _run(false),
@@ -820,51 +1372,89 @@ class _AttachmentChipState extends State<_AttachmentChip> {
   static String _size(int b) => b < 1024
       ? '$b B'
       : b < 1024 * 1024
-          ? '${(b / 1024).toStringAsFixed(0)} KB'
-          : '${(b / 1024 / 1024).toStringAsFixed(1)} MB';
+      ? '${(b / 1024).toStringAsFixed(0)} KB'
+      : '${(b / 1024 / 1024).toStringAsFixed(1)} MB';
 }
 
 /// For the event dialog and tests.
 typedef EventFinder = Future<EmailEvent?> Function();
 
 /// The right-click (or long-press) menu for an email, like Apple Mail's.
-Future<void> showMessageMenu(BuildContext context, MimeMessage m, Offset at) async {
+Future<void> showMessageMenu(
+  BuildContext context,
+  MimeMessage m,
+  Offset at,
+) async {
   final state = context.read<AppState>();
   final sender = MailService.senderOf(m)?.email;
   final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-  PopupMenuItem<String> item(String value, IconData icon, String label) => PopupMenuItem(
+  PopupMenuItem<String> item(String value, IconData icon, String label) =>
+      PopupMenuItem(
         value: value,
         height: 36,
-        child: Row(children: [Icon(icon, size: 18), const SizedBox(width: 12), Text(label)]),
+        child: Row(
+          children: [
+            Icon(icon, size: 18),
+            const SizedBox(width: 12),
+            Text(label),
+          ],
+        ),
       );
   final choice = await showMenu<String>(
-        popUpAnimationStyle: AnimationStyle.noAnimation,
+    popUpAnimationStyle: AnimationStyle.noAnimation,
     context: context,
-    position: RelativeRect.fromRect(at & const Size(1, 1), Offset.zero & overlay.size),
+    position: RelativeRect.fromRect(
+      at & const Size(1, 1),
+      Offset.zero & overlay.size,
+    ),
     items: [
       item('reply', Icons.reply, 'Reply'),
-      item('replyAll', Icons.reply_all, 'Reply all'),
+      item('replyAll', Icons.reply_all, 'Reply All'),
       item('forward', Icons.forward, 'Forward'),
       const PopupMenuDivider(),
-      item('read', m.isSeen ? Icons.mark_email_unread_outlined : Icons.drafts_outlined,
-          m.isSeen ? 'Mark as unread' : 'Mark as read'),
-      item('flag', m.isFlagged ? Icons.outlined_flag : Icons.flag_outlined, m.isFlagged ? 'Unflag' : 'Flag'),
-      item('remind', Icons.alarm, 'Remind me…'),
+      item(
+        'read',
+        m.isSeen ? Icons.mark_email_unread_outlined : Icons.drafts_outlined,
+        m.isSeen ? 'Mark as Unread' : 'Mark as Read',
+      ),
+      item(
+        'flag',
+        m.isFlagged ? Icons.outlined_flag : Icons.flag_outlined,
+        m.isFlagged ? 'Unflag' : 'Flag',
+      ),
+      item('remind', Icons.alarm, 'Remind Me…'),
       const PopupMenuDivider(),
       item('archive', Icons.archive_outlined, 'Archive'),
-      item('move', Icons.drive_file_move_outline, 'Move to…'),
-      item('junk', Icons.report_gmailerrorred, state.isInJunk(m) ? 'Not Junk' : 'Move to Junk'),
+      item('move', Icons.drive_file_move_outline, 'Move To…'),
+      item(
+        'junk',
+        Icons.report_gmailerrorred,
+        state.isInJunk(m) ? 'Not Junk' : 'Move to Junk',
+      ),
       item('delete', Icons.delete_outline, 'Delete'),
       const PopupMenuDivider(),
       if (sender != null)
-        item('vip', state.userData.isVip(sender) ? Icons.star_rounded : Icons.star_outline_rounded,
-            state.userData.isVip(sender) ? 'Remove from VIPs' : 'Add sender to VIPs'),
-      item('mute', Icons.notifications_off_outlined, state.isMuted(m) ? 'Unmute conversation' : 'Mute conversation'),
-      if (sender != null) item('copy', Icons.copy, 'Copy sender address'),
-      if (sender != null) item('block', Icons.block, 'Block sender…'),
+        item(
+          'vip',
+          state.userData.isVip(sender)
+              ? Icons.star_rounded
+              : Icons.star_outline_rounded,
+          state.userData.isVip(sender)
+              ? 'Remove from VIPs'
+              : 'Add Sender to VIPs',
+        ),
+      item(
+        'mute',
+        Icons.notifications_off_outlined,
+        state.isMuted(m) ? 'Unmute Conversation' : 'Mute Conversation',
+      ),
+      if (sender != null) item('copy', Icons.copy, 'Copy Sender Address'),
+      if (sender != null) item('block', Icons.block, 'Block Sender…'),
     ],
   );
   if (choice == null || !context.mounted) return;
+  // Right-clicking inside a selection acts on all of it, like Mail.
+  final all = state.hasMulti && state.isSelected(m) ? state.targets : [m];
   switch (choice) {
     case 'reply':
       openReply(context, m);
@@ -873,9 +1463,9 @@ Future<void> showMessageMenu(BuildContext context, MimeMessage m, Offset at) asy
     case 'forward':
       openForward(context, m);
     case 'read':
-      await state.toggleRead(m);
+      await state.setRead(all, !m.isSeen);
     case 'flag':
-      await state.toggleFlag(m);
+      await state.setFlagged(all, !m.isFlagged);
     case 'remind':
       final picked = await showDialog<Object>(
         context: context,
@@ -887,15 +1477,22 @@ Future<void> showMessageMenu(BuildContext context, MimeMessage m, Offset at) asy
                 onPressed: () => Navigator.pop(c, time),
                 child: Text('$label  ·  ${DateFormat('E HH:mm').format(time)}'),
               ),
-            SimpleDialogOption(onPressed: () => Navigator.pop(c, 'custom'), child: const Text('Pick date & time…')),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(c, 'custom'),
+              child: const Text('Pick date & time…'),
+            ),
           ],
         ),
       );
       if (!context.mounted) return;
-      final when = picked is DateTime ? picked : (picked == 'custom' ? await pickDateTime(context, help: 'Remind me on') : null);
+      final when = picked is DateTime
+          ? picked
+          : (picked == 'custom'
+                ? await pickDateTime(context, help: 'Remind me on')
+                : null);
       if (when != null) await state.snooze(m, when);
     case 'archive':
-      await state.archiveMessage(m);
+      await state.archiveMessages(all);
     case 'move':
       final owner = state.sessionOf(m);
       final here = state.mailboxOf(m);
@@ -904,19 +1501,27 @@ Future<void> showMessageMenu(BuildContext context, MimeMessage m, Offset at) asy
         builder: (c) => SimpleDialog(
           title: const Text('Move to'),
           children: [
-            for (final b in (owner?.mailboxes ?? const <Mailbox>[]).where((b) => b.path != here?.path))
+            for (final b in (owner?.mailboxes ?? const <Mailbox>[]).where(
+              (b) => b.path != here?.path,
+            ))
               SimpleDialogOption(
                 onPressed: () => Navigator.pop(c, b),
-                child: Row(children: [Icon(mailboxIcon(b), size: 18), const SizedBox(width: 10), Text(b.isInbox ? 'Inbox' : b.name)]),
+                child: Row(
+                  children: [
+                    Icon(mailboxIcon(b), size: 18),
+                    const SizedBox(width: 10),
+                    Text(b.isInbox ? 'Inbox' : b.name),
+                  ],
+                ),
               ),
           ],
         ),
       );
-      if (target != null) await state.moveMessage(m, target);
+      if (target != null) await state.moveMessages(all, target);
     case 'junk':
-      await state.junkMessage(m);
+      await state.junkMessages(all);
     case 'delete':
-      await state.deleteMessage(m);
+      await state.deleteMessages(all);
     case 'vip':
       await state.toggleVip(sender!);
     case 'mute':
@@ -929,10 +1534,18 @@ Future<void> showMessageMenu(BuildContext context, MimeMessage m, Offset at) asy
         context: context,
         builder: (c) => AlertDialog(
           title: Text('Block $sender?'),
-          content: const Text('Their emails will go straight to Junk on this computer. You can unblock them in Settings.'),
+          content: const Text(
+            'Their emails will go straight to Junk on this computer. You can unblock them in Settings.',
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Block')),
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Block'),
+            ),
           ],
         ),
       );
@@ -940,17 +1553,20 @@ Future<void> showMessageMenu(BuildContext context, MimeMessage m, Offset at) asy
   }
 }
 
-
 /// Reports its child's height after each layout.
 class _MeasureHeight extends SingleChildRenderObjectWidget {
   const _MeasureHeight({required this.onChange, required super.child});
   final ValueChanged<double> onChange;
 
   @override
-  RenderObject createRenderObject(BuildContext context) => _RenderMeasureHeight(onChange);
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMeasureHeight(onChange);
 
   @override
-  void updateRenderObject(BuildContext context, _RenderMeasureHeight renderObject) => renderObject.onChange = onChange;
+  void updateRenderObject(
+    BuildContext context,
+    _RenderMeasureHeight renderObject,
+  ) => renderObject.onChange = onChange;
 }
 
 class _RenderMeasureHeight extends RenderProxyBox {
@@ -967,4 +1583,79 @@ class _RenderMeasureHeight extends RenderProxyBox {
       WidgetsBinding.instance.addPostFrameCallback((_) => onChange(h));
     }
   }
+}
+
+/// What the reading pane shows when several messages are selected.
+class _MultiSelection extends StatelessWidget {
+  const _MultiSelection({required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MacColors.of(context);
+    final state = context.read<AppState>();
+    final ms = state.targets;
+    final anyUnread = ms.any((m) => !m.isSeen);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(CupertinoIcons.envelope_open, size: 44, color: c.tertiaryLabel),
+          const SizedBox(height: 10),
+          Text(
+            '$count messages selected',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: c.secondaryLabel,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton(
+                onPressed: () => state.archiveMessages(ms),
+                child: const Text('Archive'),
+              ),
+              OutlinedButton(
+                onPressed: () => state.deleteMessages(ms),
+                child: const Text('Delete'),
+              ),
+              OutlinedButton(
+                onPressed: () => state.setRead(ms, anyUnread),
+                child: Text(anyUnread ? 'Mark as Read' : 'Mark as Unread'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Every header of a message, as sent (View > Message > All Headers in Mail).
+void showAllHeaders(BuildContext context, MimeMessage m) {
+  final c = MacColors.of(context);
+  final text = [
+    for (final h in m.headers ?? const <Header>[]) '${h.name}: ${h.value ?? ''}',
+  ].join('\n');
+  showDialog<void>(
+    context: context,
+    builder: (d) => AlertDialog(
+      title: const Text('All Headers'),
+      content: SizedBox(
+        width: 640,
+        height: 420,
+        child: SingleChildScrollView(
+          child: SelectableText(
+            text.isEmpty ? 'No headers were downloaded for this message.' : text,
+            style: TextStyle(fontFamily: 'Menlo', fontSize: 11.5, height: 1.4, color: c.label),
+          ),
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(d), child: const Text('Done'))],
+    ),
+  );
 }

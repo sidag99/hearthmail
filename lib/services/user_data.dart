@@ -70,7 +70,27 @@ class ScheduledMail {
     this.inReplyToId,
     this.references,
     this.attachmentPaths = const [],
+    this.error,
   });
+
+  /// Why sending failed for good (it then waits for the user instead of
+  /// being retried).
+  final String? error;
+
+  ScheduledMail withError(String? e) => ScheduledMail(
+        id: id,
+        accountId: accountId,
+        sendAt: sendAt,
+        to: to,
+        cc: cc,
+        bcc: bcc,
+        subject: subject,
+        body: body,
+        inReplyToId: inReplyToId,
+        references: references,
+        attachmentPaths: attachmentPaths,
+        error: e,
+      );
 
   final String id;
   final String accountId;
@@ -92,6 +112,7 @@ class ScheduledMail {
         'inReplyTo': inReplyToId,
         'references': references,
         'files': attachmentPaths,
+        if (error != null) 'error': error,
       };
 
   factory ScheduledMail.fromJson(Map<String, dynamic> j) => ScheduledMail(
@@ -106,6 +127,7 @@ class ScheduledMail {
         inReplyToId: j['inReplyTo'] as String?,
         references: j['references'] as String?,
         attachmentPaths: [for (final f in (j['files'] as List? ?? const [])) f as String],
+        error: j['error'] as String?,
       );
 }
 
@@ -133,10 +155,17 @@ class UserData {
     if (raw != null) {
       try {
         d._load(jsonDecode(raw) as Map<String, dynamic>);
-      } catch (_) {}
+      } catch (_) {
+        // Keep the original before anything overwrites it.
+        await prefs.setString('$_key.backup.${DateTime.now().millisecondsSinceEpoch}', raw);
+        d.loadFailed = true;
+      }
     }
     return d;
   }
+
+  /// The saved data couldn't be read fully (a backup copy was kept).
+  bool loadFailed = false;
 
   static const _key = 'userdata.v1';
   final SharedPreferences? _prefs;

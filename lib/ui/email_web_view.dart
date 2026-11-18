@@ -79,9 +79,12 @@ class EmailWebViewState extends State<EmailWebView> {
           onPageFinished: (_) => _applyInset(),
           onNavigationRequest: (req) {
             final url = req.url;
-            if (url.startsWith('about:') || url.startsWith('data:')) return NavigationDecision.navigate;
+            // Only our own page load (loadHtmlString) stays inside.
+            if (url.startsWith('about:')) return NavigationDecision.navigate;
             final uri = Uri.tryParse(url);
-            if (uri != null && req.isMainFrame) {
+            // Links open in the browser or mail composer only: file:, smb:,
+            // data:, app-specific schemes and the like are ignored.
+            if (uri != null && req.isMainFrame && const {'http', 'https', 'mailto'}.contains(uri.scheme.toLowerCase())) {
               launchUrl(uri, mode: LaunchMode.externalApplication);
             }
             return NavigationDecision.prevent;

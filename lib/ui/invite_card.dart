@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../services/calendar_invite.dart';
+import '../services/mail_service.dart';
 import '../state/app_state.dart';
 
 /// A meeting invitation: title, time, place, organizer and Accept / Maybe /
@@ -41,6 +42,26 @@ class _InviteCardState extends State<InviteCard> {
   }
 
   Future<void> _answer(AppState state, Invite invite, PartStat stat) async {
+    // The answer goes to the invitation's organizer. If that isn't who
+    // sent the email, check first: a forged invite could make your account
+    // write to someone else.
+    final sender = MailService.senderOf(widget.message)?.email.toLowerCase() ?? '';
+    final organizer = invite.organizerEmail.toLowerCase();
+    if (organizer.isNotEmpty && organizer != sender) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Send your answer to the organizer?'),
+          content: Text('This invitation was sent by ${sender.isEmpty ? 'an unknown sender' : sender}, '
+              'but your answer goes to the organizer, ${invite.organizerEmail}.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Send')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
     setState(() => _sending = stat);
     try {
       await state.respondToInvite(widget.message, invite, stat);

@@ -168,7 +168,8 @@ ThemeData buildMacTheme(Brightness brightness) {
     ),
     popupMenuTheme: PopupMenuThemeData(
       color: brightness == Brightness.dark ? const Color(0xFF2C2C2E) : const Color(0xFFF6F6F6),
-      elevation: 8,
+      elevation: 6,
+      shadowColor: Colors.black38,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: c.separator, width: 0.5)),
       textStyle: TextStyle(fontSize: 13, color: c.label),
       menuPadding: const EdgeInsets.symmetric(vertical: 4),
@@ -221,6 +222,12 @@ final bool useMacWindow =
 
 /// Height of the unified title bar + toolbar, where the window buttons sit.
 const double kToolbarHeight52 = 52;
+
+/// Apple Mail's flag colours, by index (see MailService.flagColorNames).
+const kFlagColors = [
+  Color(0xFFFF3B30), Color(0xFFFF9500), Color(0xFFFFCC00), Color(0xFF34C759),
+  Color(0xFF007AFF), Color(0xFFAF52DE), Color(0xFF8E8E93),
+];
 
 /// Room the window's close/minimize/zoom buttons need at the top left of
 /// whichever pane touches the window's left edge.

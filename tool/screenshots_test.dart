@@ -99,6 +99,15 @@ Future<void> loadFonts() async {
     roboto.addFont(f('Roboto-$w.ttf'));
   }
   await roboto.load();
+  // The theme's Mac text styles name Apple's system fonts, which tests
+  // don't have; stand in Roboto so labels render as text.
+  for (final family in ['CupertinoSystemText', 'CupertinoSystemDisplay', '.AppleSystemUIFont']) {
+    final l = FontLoader(family);
+    for (final w in ['Regular', 'Medium', 'Bold']) {
+      l.addFont(f('Roboto-$w.ttf'));
+    }
+    await l.load();
+  }
   await (FontLoader('MaterialIcons')..addFont(f('MaterialIcons-Regular.otf'))).load();
   // Apple-style icons used across the UI (bundled by the cupertino_icons package).
   await (FontLoader('packages/cupertino_icons/CupertinoIcons')
@@ -260,11 +269,11 @@ void main() {
     final tile = find.text('Prof. Elena Ruiz');
     await tester.tap(tile, buttons: kSecondaryButton);
     await tester.pumpAndSettle();
-    for (final label in ['Reply', 'Forward', 'Remind me…', 'Move to Junk', 'Add sender to VIPs', 'Block sender…']) {
+    for (final label in ['Reply', 'Forward', 'Remind Me…', 'Move to Junk', 'Add Sender to VIPs', 'Block Sender…']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     await snap(tester, '8_context_menu');
-    await tester.tap(find.text('Add sender to VIPs'));
+    await tester.tap(find.text('Add Sender to VIPs'));
     await tester.pumpAndSettle();
     expect(state.userData.vips, contains('eruiz@cs.university.edu'));
   });
@@ -370,6 +379,49 @@ void main() {
     await tester.tap(find.text('Confirm you will join on Zoom'));
     await tester.pump();
     await snap(tester, '14_reply_intents');
+  });
+
+  testWidgets('every settings tab', (tester) async {
+    size(tester, 1200, 800);
+    final state = await sampleState();
+    await tester.pumpWidget(app(state));
+    await tester.tap(find.byTooltip('Settings (⌘,)'));
+    await tester.pumpAndSettle();
+    var i = 0;
+    for (final tab in ['General', 'Accounts', 'Junk Mail', 'Viewing', 'Composing', 'Signatures', 'Rules', 'AI', 'Privacy']) {
+      await tester.tap(find.text(tab).last);
+      await tester.pumpAndSettle();
+      await snap(tester, 'audit_settings_${i++}_${tab.toLowerCase().replaceAll(' ', '_')}');
+    }
+  });
+
+  testWidgets('new message with intent panel', (tester) async {
+    size(tester, 1200, 800);
+    final state = await sampleState();
+    await tester.pumpWidget(app(state, home: const ComposePage()));
+    await tester.pump();
+    await snap(tester, 'audit_compose_new');
+  });
+
+  testWidgets('several messages selected', (tester) async {
+    size(tester, 1440, 900);
+    final state = await sampleState();
+    await tester.pumpWidget(app(state));
+    state.selectAll();
+    await tester.pump();
+    await snap(tester, 'audit_multi_select');
+  });
+
+  testWidgets('folder view and narrow sizes', (tester) async {
+    final state = await sampleState();
+    final s = state.sessions.first;
+    for (final (w, h) in [(1440.0, 900.0), (960.0, 700.0), (700.0, 600.0)]) {
+      size(tester, w, h);
+      await tester.pumpWidget(app(state));
+      state.openFolder(s, s.mailboxes.firstWhere((b) => b.isInbox));
+      await tester.pump(const Duration(milliseconds: 100));
+      await snap(tester, 'audit_folder_${w.toInt()}');
+    }
   });
 
   testWidgets('phone-width layout', (tester) async {

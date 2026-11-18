@@ -78,6 +78,8 @@ class _SidebarState extends State<Sidebar> {
       required VoidCallback onTap,
       Color? iconColor,
       int count = 0,
+      int indent = 0,
+      void Function(List<MimeMessage>)? onDrop,
     }) =>
         _SidebarRow(
           icon: icon,
@@ -85,6 +87,8 @@ class _SidebarState extends State<Sidebar> {
           selected: selected,
           iconColor: iconColor ?? c.accent,
           count: count,
+          indent: indent,
+          onDrop: onDrop,
           onTap: () {
             onTap();
             widget.onNavigate?.call();
@@ -197,6 +201,16 @@ class _SidebarState extends State<Sidebar> {
               row(
                 icon: mailboxIcon(b),
                 label: b.isInbox ? 'Inbox' : b.name,
+                // Subfolders are indented under their parent, like Mail.
+                indent: folderDepth(b, s.mailboxes),
+                // Drop messages here to move them (same account only).
+                onDrop: b.isNotSelectable
+                    ? null
+                    : (ms) {
+                        final mine = [for (final m in ms) if (state.sessionOf(m) == s) m];
+                        if (mine.length < ms.length) state.toast('Messages can only be moved within the same account.');
+                        if (mine.isNotEmpty) state.moveMessages(mine, b);
+                      },
                 selected: state.view == MailView.folder(s.id, b.path),
                 count: b.isInbox ? state.unreadFor(MailView.folder(s.id, b.path)) : state.folderUnread(s, b),
                 onTap: () => state.openFolder(s, b),
@@ -309,7 +323,15 @@ class _SidebarRow extends StatelessWidget {
     required this.onTap,
     required this.iconColor,
     this.count = 0,
+    this.indent = 0,
+    this.onDrop,
   });
+
+  /// Nesting depth of a subfolder.
+  final int indent;
+
+  /// Accepts messages dragged from the list (folders only).
+  final void Function(List<MimeMessage> messages)? onDrop;
 
   final IconData icon;
   final String label;
@@ -320,11 +342,21 @@ class _SidebarRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final drop = onDrop;
+    if (drop == null) return _row(context, false);
+    return DragTarget<List<MimeMessage>>(
+      onWillAcceptWithDetails: (_) => true,
+      onAcceptWithDetails: (d) => drop(d.data),
+      builder: (context, candidates, _) => _row(context, candidates.isNotEmpty),
+    );
+  }
+
+  Widget _row(BuildContext context, bool hovering) {
     final c = MacColors.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Material(
-        color: selected ? c.sidebarSelection : Colors.transparent,
+        color: hovering ? c.accent.withValues(alpha: 0.25) : (selected ? c.sidebarSelection : Colors.transparent),
         borderRadius: BorderRadius.circular(6),
         child: InkWell(
           borderRadius: BorderRadius.circular(6),
@@ -333,7 +365,7 @@ class _SidebarRow extends StatelessWidget {
           child: SizedBox(
             height: 28,
             child: Row(children: [
-              const SizedBox(width: 8),
+              SizedBox(width: 8 + 14.0 * indent),
               Icon(icon, size: 16, color: iconColor),
               const SizedBox(width: 8),
               Expanded(
@@ -369,4 +401,19 @@ class AccountBadge extends StatelessWidget {
       ),
     ]);
   }
+}
+
+
+/// How deep [b] is nested under folders that are actually listed (so
+/// Gmail's "[Gmail]/Sent Mail" isn't indented under a hidden "[Gmail]").
+int folderDepth(Mailbox b, List<Mailbox> all) {
+  final sep = b.pathSeparator;
+  if (sep.isEmpty || !b.path.contains(sep)) return 0;
+  final paths = {for (final x in all) x.path};
+  final parts = b.path.split(sep);
+  var depth = 0;
+  for (var i = 1; i < parts.length; i++) {
+    if (paths.contains(parts.sublist(0, i).join(sep))) depth++;
+  }
+  return depth;
 }

@@ -35,7 +35,13 @@ class AppSettings {
     this.priorityFirst = false,
     this.showContactPhotos = false,
     this.markReadDelay = 0,
+    this.sortBy = 'date',
+    this.sortAscending = false,
   });
+
+  /// Message list order: date, from, subject, unread, flagged, attachments.
+  final String sortBy;
+  final bool sortAscending;
 
   /// Seconds before an opened message is marked read: 0 = at once,
   /// -1 = never (only by hand), like Apple Mail's "Mark as read" setting.
@@ -122,6 +128,8 @@ class AppSettings {
     bool? priorityFirst,
     bool? showContactPhotos,
     int? markReadDelay,
+    String? sortBy,
+    bool? sortAscending,
   }) =>
       AppSettings(
         groupConversations: groupConversations ?? this.groupConversations,
@@ -150,6 +158,8 @@ class AppSettings {
         priorityFirst: priorityFirst ?? this.priorityFirst,
         showContactPhotos: showContactPhotos ?? this.showContactPhotos,
         markReadDelay: markReadDelay ?? this.markReadDelay,
+        sortBy: sortBy ?? this.sortBy,
+        sortAscending: sortAscending ?? this.sortAscending,
       );
 
   Map<String, dynamic> toJson() => {
@@ -179,6 +189,8 @@ class AppSettings {
         'priorityFirst': priorityFirst,
         'showContactPhotos': showContactPhotos,
         'markReadDelay': markReadDelay,
+        'sortBy': sortBy,
+        'sortAscending': sortAscending,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -208,6 +220,8 @@ class AppSettings {
         priorityFirst: j['priorityFirst'] as bool? ?? false,
         showContactPhotos: j['showContactPhotos'] as bool? ?? false,
         markReadDelay: j['markReadDelay'] as int? ?? 0,
+        sortBy: j['sortBy'] as String? ?? 'date',
+        sortAscending: j['sortAscending'] as bool? ?? false,
       );
 }
 

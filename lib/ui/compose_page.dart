@@ -18,6 +18,7 @@ import '../services/mail_service.dart';
 import '../services/user_data.dart';
 import '../state/app_state.dart';
 import 'compose_ai.dart';
+import 'recipient_field.dart';
 import 'mac_style.dart';
 import 'message_view.dart' show pickDateTime;
 
@@ -92,6 +93,13 @@ class _ComposePageState extends State<ComposePage> {
   /// The copy of this message last saved to Drafts; the next save (or
   /// sending) replaces it.
   MimeMessage? _savedDraft;
+
+  /// The draft this composer was opened from (kept until you save or send,
+  /// so "Discard" never loses it).
+  MimeMessage? _openedDraft;
+
+  /// An autosave still talking to the server.
+  Future<void>? _autosaving;
   String? _savedSnapshot;
   Timer? _autosave;
 
@@ -184,25 +192,40 @@ class _ComposePageState extends State<ComposePage> {
       if (hasText != hadText && mounted) setState(() => hadText = hasText);
     });
     _initialSnapshot = _snapshot();
-    _savedDraft = restore?.replacesDraft;
+    _openedDraft = restore?.replacesDraft;
     // Autosave like Mail and Gmail, so a crash or quit doesn't lose much.
     _autosave = Timer.periodic(const Duration(seconds: 30), (_) => _autosaveNow());
   }
 
   Future<void> _autosaveNow() async {
-    if (!mounted || _sent || !_dirty || _generating || _from?.connected != true) return;
+    if (!mounted || _sent || _autosaving != null || !_dirty || _generating || _from?.connected != true) return;
     final snap = _snapshot();
     if (snap == _savedSnapshot) return;
     final state = context.read<AppState>();
-    try {
-      final saved = await state.saveDraft(_mail(state), quiet: true);
-      _savedSnapshot = snap;
-      // Without a UID we couldn't replace it next time; stop autosaving.
-      if (saved == null) _autosave?.cancel();
-      _savedDraft = saved;
-    } catch (_) {
-      // Try again on the next tick.
-    }
+    // Autosaves replace only their own previous copy, never the draft this
+    // was opened from.
+    final mail = _mail(state, replaces: _savedDraft);
+    final run = () async {
+      try {
+        final saved = await state.saveDraft(mail, quiet: true);
+        _savedSnapshot = snap;
+        // Without a UID we couldn't replace it next time; stop autosaving.
+        if (saved == null) _autosave?.cancel();
+        _savedDraft = saved;
+      } catch (_) {
+        // Try again on the next tick.
+      }
+    }();
+    _autosaving = run;
+    await run;
+    _autosaving = null;
+  }
+
+  /// After a real save or send: the opened draft is superseded too.
+  void _dropOpenedDraft(AppState state) {
+    final d = _openedDraft;
+    _openedDraft = null;
+    if (d != null) unawaited(state.discardDraft(d));
   }
 
   String _snapshot() => [_to.text, _cc.text, _bcc.text, _subject.text, _body.text, _files.length].join('\u0000');
@@ -385,7 +408,7 @@ class _ComposePageState extends State<ComposePage> {
     return true;
   }
 
-  OutgoingMail _mail(AppState state, {DateTime? sendAt}) => OutgoingMail(
+  OutgoingMail _mail(AppState state, {DateTime? sendAt, MimeMessage? replaces}) => OutgoingMail(
         from: _from!,
         to: _to.text,
         cc: _cc.text,
@@ -397,7 +420,7 @@ class _ComposePageState extends State<ComposePage> {
         files: [..._files],
         sendAt: sendAt,
         followUpDays: _followUpDays,
-        replacesDraft: _savedDraft,
+        replacesDraft: replaces ?? _savedDraft ?? _openedDraft,
       );
 
   Future<void> _send({DateTime? at}) async {
@@ -416,13 +439,21 @@ class _ComposePageState extends State<ComposePage> {
       );
       if (ok != true) return;
     }
-    if (_from?.connected != true && at == null) {
-      _snack('${_from?.config.email} is not connected right now.');
-      return;
-    }
+    // Offline is fine: it waits in the Outbox (Send Later) until you're back.
     _autosave?.cancel();
     _sent = true; // stops any further autosave
-    await state.sendMail(_mail(state, sendAt: at));
+    await _autosaving; // so it can't leave a stray copy behind
+    try {
+      final mail = _mail(state, sendAt: at);
+      await state.sendMail(mail);
+      // The latest autosave is replaced by the sent message; the draft this
+      // was opened from goes too.
+      if (_savedDraft != null && _openedDraft != null) _dropOpenedDraft(state);
+    } catch (e) {
+      _sent = false;
+      _snack('Could not send: ${AppState.friendlyError(e)}');
+      return;
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -489,6 +520,8 @@ class _ComposePageState extends State<ComposePage> {
     );
     if (choice == 'discard') {
       _autosave?.cancel();
+      await _autosaving;
+      // Only copies autosaved in this session; a draft you reopened stays.
       final d = _savedDraft;
       if (d != null) unawaited(state.discardDraft(d));
       return true;
@@ -496,7 +529,9 @@ class _ComposePageState extends State<ComposePage> {
     if (choice != 'save' || _from == null) return false;
     try {
       _autosave?.cancel();
+      await _autosaving;
       await state.saveDraft(_mail(state));
+      if (_savedDraft != null && _openedDraft != null) _dropOpenedDraft(state);
       return true;
     } catch (e) {
       _snack('Could not save the draft: ${AppState.friendlyError(e)}');
@@ -846,68 +881,15 @@ class _ComposePageState extends State<ComposePage> {
         ]),
       );
 
-  /// An address field that suggests people you have emailed before.
-  Widget _recipientField(String label, TextEditingController c, AppState state, {Widget? trailing}) {
-    final focus = _fieldFocus.putIfAbsent(c, FocusNode.new);
-    final colors = MacColors.of(context);
-    String lastToken(String text) => text.split(RegExp(r'[,;]')).last.trim();
-    return Padding(
-      padding: const EdgeInsets.only(right: 12),
-      child: Row(children: [
-        _label(label),
-        Expanded(
-          child: RawAutocomplete<(String, String)>(
-            textEditingController: c,
-            focusNode: focus,
-            optionsBuilder: (v) {
-              final token = lastToken(v.text);
-              if (token.length < 2) return const [];
-              return state.userData.suggestContacts(token);
-            },
-            displayStringForOption: (o) => o.$1,
-            onSelected: (o) {
-              final parts = c.text.split(RegExp(r'[,;]'));
-              parts.removeLast();
-              final addr = o.$2.isEmpty ? o.$1 : '${o.$2.contains(',') ? '"${o.$2}"' : o.$2} <${o.$1}>';
-              final text = [...parts.map((p) => p.trim()).where((p) => p.isNotEmpty), addr].join(', ');
-              c.value = TextEditingValue(text: '$text, ', selection: TextSelection.collapsed(offset: text.length + 2));
-            },
-            fieldViewBuilder: (context, controller, focusNode, onSubmit) => TextField(
-              controller: controller,
-              focusNode: focusNode,
-              style: _fieldStyle,
-              decoration: _fieldDecoration,
-            ),
-            optionsViewBuilder: (context, onSelected, options) => Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                elevation: 4,
-                color: colors.window,
-                borderRadius: BorderRadius.circular(8),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420, maxHeight: 260),
-                  child: ListView(shrinkWrap: true, padding: const EdgeInsets.symmetric(vertical: 4), children: [
-                    for (final o in options)
-                      InkWell(
-                        onTap: () => onSelected(o),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(o.$2.isEmpty ? o.$1 : o.$2, style: TextStyle(fontSize: 13, color: colors.label)),
-                            if (o.$2.isNotEmpty) Text(o.$1, style: TextStyle(fontSize: 11, color: colors.secondaryLabel)),
-                          ]),
-                        ),
-                      ),
-                  ]),
-                ),
-              ),
-            ),
-          ),
-        ),
-        ?trailing,
-      ]),
-    );
-  }
+  /// An address field with tokens and suggestions from people you've emailed.
+  Widget _recipientField(String label, TextEditingController c, AppState state, {Widget? trailing}) => Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(padding: const EdgeInsets.only(top: 10), child: _label(label)),
+          Expanded(child: RecipientField(controller: c, suggest: state.userData.suggestContacts)),
+          ?trailing,
+        ]),
+      );
 
   /// The AI row: which model writes (one click to change), then actions.
   Widget _aiBar(EmailAi ai, AppState state) {

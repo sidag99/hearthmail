@@ -65,8 +65,12 @@ Stream<String> runCliLines({
   required String stdin,
   Duration timeout = const Duration(minutes: 5),
   required AiException Function(String stderr, int exitCode) onFailure,
+  bool isolateHome = false,
+  Map<String, String> extraEnv = const {},
 }) async* {
   final dir = await Directory.systemTemp.createTemp('hearthmail_cli_');
+  final env = Platform.environment;
+  final home = env['HOME'] ?? '';
   Process? process;
   final stderrBuf = StringBuffer();
   try {
@@ -74,12 +78,20 @@ Stream<String> runCliLines({
       executable,
       args,
       workingDirectory: dir.path,
+      // Only what the CLI needs to run and find its own sign-in: none of
+      // this app's other environment (tokens, keys) is passed on.
+      includeParentEnvironment: false,
       environment: {
         // The shell PATH is missing in GUI apps; node-based CLIs need it.
         'PATH': [
           ...CliLocator.candidateDirs(),
-          Platform.environment['PATH'] ?? '/usr/bin:/bin',
+          env['PATH'] ?? '/usr/bin:/bin',
         ].join(':'),
+        // An empty home keeps "~/…" pointing at nothing of the user's.
+        'HOME': isolateHome ? dir.path : home,
+        for (final k in ['USER', 'LOGNAME', 'LANG', 'TMPDIR', '__CF_USER_TEXT_ENCODING'])
+          if (env[k] != null) k: env[k]!,
+        ...extraEnv,
       },
     );
     final errSub = process.stderr

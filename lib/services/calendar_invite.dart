@@ -449,7 +449,9 @@ String _unescape(String s) => s
 String _escape(String s) =>
     s.replaceAll(r'\', r'\\').replaceAll(';', r'\;').replaceAll(',', r'\,').replaceAll('\r\n', r'\n').replaceAll('\n', r'\n');
 
-String _quoteParam(String s) => '"${s.replaceAll('"', "'")}"';
+/// A quoted ICS parameter value: no quotes, and no line breaks or other
+/// control characters that could start a new property.
+String _quoteParam(String s) => '"${s.replaceAll('"', "'").replaceAll(RegExp(r'[\x00-\x1F\x7F]'), ' ')}"';
 
 String _p2(int n) => n.toString().padLeft(2, '0');
 String _formatDate(DateTime t) => '${t.year.toString().padLeft(4, '0')}${_p2(t.month)}${_p2(t.day)}';

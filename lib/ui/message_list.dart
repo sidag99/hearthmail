@@ -1,5 +1,6 @@
 import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:intl/intl.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -194,7 +195,7 @@ class MessageListPane extends StatelessWidget {
           }
           final m = list[i];
           final z = state.snoozeOf(m);
-          final selected = identical(state.selected, m);
+          final selected = state.isSelected(m);
           final next = i + 1 < list.length ? list[i + 1] : null;
           final tile = MessageTile(
             message: m,
@@ -203,12 +204,14 @@ class MessageListPane extends StatelessWidget {
             threadCount: state.settings.groupConversations ? state.conversationSize(m) : 1,
             selected: selected,
             // Like Mail, no separator touches the selection highlight.
-            showSeparator: !selected && (next == null || !identical(state.selected, next)),
+            showSeparator: !selected && (next == null || !state.isSelected(next)),
             vip: state.isVipMessage(m),
             reminder: z != null && z.isDue,
             suspicious: MailService.suspicionOf(m) != null || state.triageOf(m)?.suspicious == true,
             onTap: () {
-              state.openMessage(m);
+              // ⌘-click adds or removes, ⇧-click selects a range, like Mail.
+              final keys = HardwareKeyboard.instance;
+              state.clickMessage(m, toggle: keys.isMetaPressed || keys.isControlPressed, range: keys.isShiftPressed);
               onOpen?.call();
             },
           );
@@ -219,7 +222,16 @@ class MessageListPane extends StatelessWidget {
             onLongPressStart: phone ? (d) => showMessageMenu(context, m, d.globalPosition) : null,
             child: tile,
           );
-          if (!phone) return withMenu;
+          if (!phone) {
+            // Drag onto a mailbox in the sidebar to move (all selected).
+            final dragged = state.isSelected(m) && state.hasMulti ? state.targets : [m];
+            return Draggable<List<MimeMessage>>(
+              data: dragged,
+              dragAnchorStrategy: pointerDragAnchorStrategy,
+              feedback: _DragBadge(count: dragged.length, subject: MailService.subjectOf(m)),
+              child: withMenu,
+            );
+          }
           // Phone-style swipes: right to archive, left to delete.
           return Dismissible(
             key: ObjectKey(m),
@@ -284,7 +296,17 @@ class _FilterButton extends StatelessWidget {
       };
 }
 
-enum _ViewOption { categories, priority, photos, about }
+enum _ViewOption { categories, priority, photos, about, ascending, descending }
+
+/// Mail's View > Sort By choices: (setting value, label, natural direction ascending?).
+const _sortChoices = [
+  ('date', 'Date', false),
+  ('from', 'From', true),
+  ('subject', 'Subject', true),
+  ('unread', 'Unread', true),
+  ('flagged', 'Flags', true),
+  ('attachments', 'Attachments', true),
+];
 
 /// Mail's ⋯ view options menu.
 class _ViewOptionsButton extends StatelessWidget {
@@ -296,14 +318,19 @@ class _ViewOptionsButton extends StatelessWidget {
     final c = MacColors.of(context);
     final s = state.settings;
     return ToolbarItem(
-      child: PopupMenuButton<_ViewOption>(
+      child: PopupMenuButton<Object>(
         popUpAnimationStyle: AnimationStyle.noAnimation,
         tooltip: 'View Options',
         onSelected: (o) => switch (o) {
+          // Picking a sort key also picks its natural direction, like Mail.
+          (String key, bool natural) => state.updateSettings(s.copyWith(sortBy: key, sortAscending: natural)),
+          _ViewOption.ascending => state.updateSettings(s.copyWith(sortAscending: true)),
+          _ViewOption.descending => state.updateSettings(s.copyWith(sortAscending: false)),
           _ViewOption.categories => state.updateSettings(s.copyWith(showCategories: !s.showCategories)),
           _ViewOption.priority => state.updateSettings(s.copyWith(priorityFirst: !s.priorityFirst)),
           _ViewOption.photos => state.updateSettings(s.copyWith(showContactPhotos: !s.showContactPhotos)),
           _ViewOption.about => _aboutCategories(context),
+          _ => null,
         },
         itemBuilder: (_) => [
           CheckedPopupMenuItem(
@@ -312,6 +339,12 @@ class _ViewOptionsButton extends StatelessWidget {
               value: _ViewOption.priority, checked: s.priorityFirst, height: 32, child: const Text('Show Priority Messages')),
           CheckedPopupMenuItem(
               value: _ViewOption.photos, checked: s.showContactPhotos, height: 32, child: const Text('Show Contact Photo')),
+          const PopupMenuDivider(),
+          for (final (key, label, natural) in _sortChoices)
+            CheckedPopupMenuItem(value: (key, natural), checked: s.sortBy == key, height: 30, child: Text('Sort by $label')),
+          const PopupMenuDivider(),
+          CheckedPopupMenuItem(value: _ViewOption.ascending, checked: s.sortAscending, height: 30, child: const Text('Ascending')),
+          CheckedPopupMenuItem(value: _ViewOption.descending, checked: !s.sortAscending, height: 30, child: const Text('Descending')),
           const PopupMenuDivider(),
           const PopupMenuItem(value: _ViewOption.about, height: 32, child: Text('About Categories…')),
         ],
@@ -625,7 +658,8 @@ class MessageTile extends StatelessWidget {
                     if (t?.priority == MailPriority.high) badge(CupertinoIcons.exclamationmark, 'Priority'),
                     if (needsReply) badge(CupertinoIcons.arrowshape_turn_up_left, 'Needs reply'),
                     if (message.hasAttachments()) badge(CupertinoIcons.paperclip),
-                    if (message.isFlagged) badge(CupertinoIcons.flag_fill, null, const Color(0xFFFF9500)),
+                    if (message.isFlagged)
+                      badge(CupertinoIcons.flag_fill, null, kFlagColors[MailService.flagColorOf(message)]),
                   ]),
                   if (body.isNotEmpty) ...[
                     const SizedBox(height: 1),
@@ -666,14 +700,19 @@ class _ScheduledList extends StatelessWidget {
       itemBuilder: (context, i) {
         final m = items[i];
         return ListTile(
-          leading: Icon(CupertinoIcons.clock, size: 16, color: c.accent),
+          leading: Icon(m.error == null ? CupertinoIcons.clock : CupertinoIcons.exclamationmark_circle,
+              size: 16, color: m.error == null ? c.accent : Theme.of(context).colorScheme.error),
           title: Text(m.subject.isEmpty ? '(no subject)' : m.subject, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
-              'To ${m.to}\n${DateFormat('E d MMM, HH:mm').format(m.sendAt)} · ${state.sessionById(m.accountId)?.config.email ?? ''}',
-              maxLines: 2),
+              m.error != null
+                  ? 'To ${m.to}\nNot sent: ${m.error}'
+                  : 'To ${m.to}\n${DateFormat('E d MMM, HH:mm').format(m.sendAt)} · ${state.sessionById(m.accountId)?.config.email ?? ''}',
+              maxLines: 2,
+              style: m.error == null ? null : TextStyle(color: Theme.of(context).colorScheme.error)),
           isThreeLine: true,
           trailing: Wrap(children: [
-            ToolButton(icon: CupertinoIcons.paperplane, tooltip: 'Send Now', onPressed: () => state.sendScheduledNow(m)),
+            ToolButton(icon: CupertinoIcons.pencil, tooltip: 'Edit', onPressed: () => state.editScheduled(m)),
+            ToolButton(icon: CupertinoIcons.paperplane, tooltip: m.error == null ? 'Send Now' : 'Try Again', onPressed: () => state.sendScheduledNow(m)),
             ToolButton(icon: CupertinoIcons.xmark, tooltip: 'Cancel', onPressed: () => state.cancelScheduled(m)),
           ]),
         );
@@ -720,5 +759,35 @@ class _FollowUpList extends StatelessWidget {
       if (waiting.isNotEmpty) const SectionTitle('Waiting'),
       for (final f in waiting) tile(f, false),
     ]);
+  }
+}
+
+
+/// What follows the pointer while dragging messages.
+class _DragBadge extends StatelessWidget {
+  const _DragBadge({required this.count, required this.subject});
+  final int count;
+  final String subject;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = MacColors.of(context);
+    return Material(
+      color: c.window,
+      elevation: 6,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 260),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(CupertinoIcons.envelope, size: 14, color: c.accent),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(count == 1 ? subject : '$count messages',
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: c.label)),
+          ),
+        ]),
+      ),
+    );
   }
 }

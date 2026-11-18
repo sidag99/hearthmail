@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -121,14 +122,23 @@ void main() {
     expect(client.servers.smtpPort, 587);
   });
 
-  test('rejects a redirect with the wrong state', () async {
+  test('ignores a redirect with the wrong state and keeps waiting', () async {
+    var tokenRequests = 0;
     final client = OAuthClient.google(
       clientId: 'cid',
       clientSecret: '',
       openBrowser: fakeBrowser((_) {}, tamperState: true),
-      httpClient: MockClient((_) async => http.Response('{}', 500)),
+      httpClient: MockClient((_) async {
+        tokenRequests++;
+        return http.Response('{}', 500);
+      }),
     );
-    await expectLater(client.signIn(), throwsA(isA<OAuthException>()));
+    // A forged redirect neither signs in nor ends the sign-in.
+    await expectLater(
+      client.signIn().timeout(const Duration(milliseconds: 800)),
+      throwsA(isA<TimeoutException>()),
+    );
+    expect(tokenRequests, 0);
   });
 
   test('explains admin-consent errors from universities', () async {

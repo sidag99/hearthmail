@@ -133,6 +133,20 @@ class OutgoingMail {
   /// An older draft this message continues; deleted from the Drafts folder
   /// once the message is sent, scheduled or saved again.
   final MimeMessage? replacesDraft;
+
+  OutgoingMail copyWith({DateTime? sendAt}) => OutgoingMail(
+        from: from,
+        to: to,
+        cc: cc,
+        bcc: bcc,
+        subject: subject,
+        body: body,
+        inReplyTo: inReplyTo,
+        files: files,
+        sendAt: sendAt ?? this.sendAt,
+        followUpDays: followUpDays,
+        replacesDraft: replacesDraft,
+      );
 }
 
 /// One connected account: its server connection, folders and inbox.
@@ -316,7 +330,13 @@ class AppState extends ChangeNotifier {
       return (provider: p, model: model.isNotEmpty ? model : EngineHub.defaultModel(engine, writing: writing));
     }
 
-    final assist = cloud(settings.assistEngine, settings.assistCloudModel, 'everything else', writing: false);
+    // Background jobs read every incoming email unattended; Codex can't be
+    // fully stripped of tools, so it is only used for writing you start.
+    final assistEngine = settings.assistEngine == AiEngine.codexCli ? AiEngine.local : settings.assistEngine;
+    if (assistEngine != settings.assistEngine) {
+      errors.add('Codex is only used for writing; sorting and summaries use local AI.');
+    }
+    final assist = cloud(assistEngine, settings.assistCloudModel, 'everything else', writing: false);
     final writer = cloud(settings.writingEngine, settings.writingCloudModel, 'writing', writing: true);
     engineError = errors.isEmpty ? null : errors.join(' ');
 
@@ -473,6 +493,10 @@ class AppState extends ChangeNotifier {
 
   Future<void> init() async {
     userData = await UserData.open();
+    if (userData.loadFailed) {
+      toast('Some saved data (VIPs, reminders, Send Later) could not be read. A backup copy was kept.');
+    }
+    unawaited(_cleanTemp());
     await _initInstantMail(); // show cached mail before anything slow
     await refreshAi();
     _tickTimer = Timer.periodic(const Duration(seconds: 30), (_) => _tick());
@@ -675,6 +699,18 @@ class AppState extends ChangeNotifier {
     await (s?.vectors ?? await VectorIndex.open(config.id, '')).delete();
     sessions = sessions.where((x) => x.id != config.id).toList();
     await _store.saveAccounts(accounts);
+    // Its reminders, follow-ups and signature go too. Unsent messages stay
+    // in Send Later, marked as needing another account (Edit to resend).
+    userData.snoozes.removeWhere((_, z) => z.accountId == config.id);
+    userData.followUps.removeWhere((f) => f.accountId == config.id);
+    userData.signatures.remove(config.id);
+    for (final e in [..._pendingSends.entries]) {
+      if (e.value.mail.from.id == config.id) {
+        e.value.timer.cancel();
+        _pendingSends.remove(e.key);
+      }
+    }
+    await userData.save();
     if (view.accountId == config.id) view = const MailView.allInboxes();
     if (selected != null && sessionOf(selected!) == s) selected = null;
     searchResults.removeWhere((m) => sessionOf(m) == s);
@@ -753,9 +789,12 @@ class AppState extends ChangeNotifier {
   void setView(MailView v) {
     view = v;
     selected = null;
+    multi.clear();
     if (v.kind != ViewKind.search) _clearSearch();
     notifyListeners();
   }
+
+  int _folderRequest = 0;
 
   Future<void> openFolder(AccountSession s, Mailbox box) async {
     if (box.isInbox) {
@@ -775,17 +814,18 @@ class AppState extends ChangeNotifier {
     _folderPage = 1;
     folderHasMore = false;
     folderLoading = true;
+    final request = ++_folderRequest;
     setView(MailView.folder(s.id, box.path));
     try {
       final msgs = await service.fetchPage(box);
-      if (folderBox != box) return;
+      if (request != _folderRequest) return; // another folder was opened
       _tag(msgs, s, box);
       folderMessages = msgs;
       folderHasMore = msgs.length >= 40;
     } catch (e) {
-      toast('Could not load ${box.name}: ${friendlyError(e)}');
+      if (request == _folderRequest) toast('Could not load ${box.name}: ${friendlyError(e)}');
     } finally {
-      folderLoading = false;
+      if (request == _folderRequest) folderLoading = false;
       notifyListeners();
     }
   }
@@ -795,6 +835,7 @@ class AppState extends ChangeNotifier {
     var all = _viewMessages(view);
     if (_categoryApplies) all = all.where((m) => categoryOf(m) == inboxCategory).toList();
     if (listFilter != ListFilter.all && view.kind != ViewKind.search) all = all.where(_passesFilter).toList();
+    if (view.kind != ViewKind.search) all = _sorted(all);
     // One row per conversation (newest message), like Mail and Gmail.
     if (settings.groupConversations && view.kind != ViewKind.search) all = collapseThreads(all);
     if (settings.priorityFirst && view.kind != ViewKind.search) {
@@ -803,6 +844,31 @@ class AppState extends ChangeNotifier {
       all = [...all.where(top), ...all.where((m) => !top(m))];
     }
     return all;
+  }
+
+  /// View > Sort By, like Mail. Ties stay newest first.
+  List<MimeMessage> _sorted(List<MimeMessage> list) {
+    final by = settings.sortBy;
+    final asc = settings.sortAscending;
+    if (by == 'date' && !asc) return list;
+    int date(MimeMessage a, MimeMessage b) => _dateOf(b).compareTo(_dateOf(a));
+    int key(MimeMessage a, MimeMessage b) => switch (by) {
+          'from' => MailService.senderName(a).toLowerCase().compareTo(MailService.senderName(b).toLowerCase()),
+          'subject' => MailService.subjectOf(a)
+              .replaceFirst(RegExp(r'^((re|fwd?|aw|wg):\s*)+', caseSensitive: false), '')
+              .toLowerCase()
+              .compareTo(MailService.subjectOf(b).replaceFirst(RegExp(r'^((re|fwd?|aw|wg):\s*)+', caseSensitive: false), '').toLowerCase()),
+          'unread' => (a.isSeen ? 1 : 0).compareTo(b.isSeen ? 1 : 0),
+          'flagged' => (a.isFlagged ? 0 : 1).compareTo(b.isFlagged ? 0 : 1),
+          'attachments' => (a.hasAttachments() ? 0 : 1).compareTo(b.hasAttachments() ? 0 : 1),
+          _ => -date(a, b),
+        };
+    final out = [...list];
+    out.sort((a, b) {
+      final k = asc ? key(a, b) : -key(a, b);
+      return by == 'date' || k != 0 ? k : date(a, b);
+    });
+    return out;
   }
 
   List<MimeMessage> _viewMessages(MailView view) {
@@ -930,6 +996,7 @@ class AppState extends ChangeNotifier {
             try {
               unawaited(_loadSent(s, quiet: quiet));
               unawaited(_refreshFolderCounts(s));
+              unawaited(_syncFlags(s));
               final latest = await s.service!.fetchPage(s.inbox!);
               _tag(latest, s, s.inbox!);
               final known = s.inboxMessages.map((m) => m.uid).toSet();
@@ -974,13 +1041,35 @@ class AppState extends ChangeNotifier {
     unawaited(openMessage(list[next]));
   }
 
+  /// Deletes opened attachments, forwarded files and calendar exports
+  /// left in the temporary folder by earlier sessions (older than a day).
+  Future<void> _cleanTemp() async {
+    try {
+      final tmp = (await getTemporaryDirectory()).path;
+      final cutoff = DateTime.now().subtract(const Duration(days: 1));
+      for (final name in ['attachments', 'forward', 'events']) {
+        final dir = Directory('$tmp/$name');
+        if (!await dir.exists()) continue;
+        await for (final e in dir.list()) {
+          try {
+            if ((await e.stat()).modified.isBefore(cutoff)) await e.delete(recursive: true);
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
+  int _openRequest = 0;
+
   Future<void> openMessage(MimeMessage m) async {
     final s = _owner[m];
     final box = _box[m];
     final service = s?.service;
     selected = m;
+    final request = ++_openRequest;
     notifyListeners();
     if (service == null || box == null) return;
+    var current = m;
     if (!MailService.hasBody(m)) {
       loadingSelected = true;
       notifyListeners();
@@ -989,16 +1078,18 @@ class AppState extends ChangeNotifier {
         _owner[full] = s;
         _box[full] = box;
         _replaceMessage(m, full);
-        if (selected == m) selected = full;
+        if (identical(selected, m)) selected = full;
+        current = full;
       } catch (e) {
-        toast('Could not open message: ${friendlyError(e)}');
+        if (request == _openRequest) toast('Could not open message: ${friendlyError(e)}');
       } finally {
-        loadingSelected = false;
+        // A newer open owns the spinner now.
+        if (request == _openRequest) loadingSelected = false;
         notifyListeners();
       }
     }
-    final current = selected;
-    if (current == null || current.isSeen) return;
+    // Only mark read the message still on screen, in its own mailbox.
+    if (request != _openRequest || !identical(selected, current) || current.isSeen) return;
     final delay = settings.markReadDelay;
     if (delay < 0) return; // marked read by hand only
     if (delay > 0) {
@@ -1020,65 +1111,173 @@ class AppState extends ChangeNotifier {
     _mergedCache = null;
   }
 
-  Future<void> toggleRead(MimeMessage m) => _act(m, (svc, box) => svc.setSeen(box, m, !m.isSeen));
-  Future<void> toggleFlag(MimeMessage m) => _act(m, (svc, box) => svc.setFlagged(box, m, !m.isFlagged));
-  Future<void> deleteMessage(MimeMessage m) {
-    final box = _box[m];
-    final forGood = box != null && MailService.isTrash(box);
-    return _act(m, (svc, box) => svc.delete(box, m), removes: true, done: forGood ? 'Deleted' : 'Moved to Trash');
-  }
-  Future<void> archiveMessage(MimeMessage m) =>
-      _act(m, (svc, box) => svc.archive(box, m), removes: true, done: 'Archived');
+  // ---- actions on one message or a whole selection
+
+  Future<void> toggleRead(MimeMessage m) => setRead([m], !m.isSeen);
+  Future<void> toggleFlag(MimeMessage m) => setFlagged([m], !m.isFlagged);
+  Future<void> deleteMessage(MimeMessage m) => deleteMessages([m]);
+  Future<void> archiveMessage(MimeMessage m) => archiveMessages([m]);
+
   /// Junk, or "Not Junk" (back to the Inbox) for mail already in Junk.
-  Future<void> junkMessage(MimeMessage m) {
-    final box = _box[m];
-    if (box != null && MailService.isJunk(box)) {
-      return _act(m, (svc, box) => svc.notJunk(box, m), removes: true, done: 'Moved to Inbox');
-    }
-    return _act(m, (svc, box) => svc.junk(box, m), removes: true, done: 'Moved to Junk');
-  }
+  Future<void> junkMessage(MimeMessage m) => junkMessages([m]);
+  Future<void> moveMessage(MimeMessage m, Mailbox target) => moveMessages([m], target);
 
   bool isInJunk(MimeMessage m) => _box[m] != null && MailService.isJunk(_box[m]!);
-  Future<void> moveMessage(MimeMessage m, Mailbox target) =>
-      _act(m, (svc, box) => svc.moveTo(box, m, target), removes: true, done: 'Moved to ${target.name}');
 
-  Future<void> _act(MimeMessage m, Future<Object?> Function(MailService svc, Mailbox box) action,
-      {bool removes = false, String? done}) async {
-    final s = _owner[m];
-    final box = _box[m];
-    if (s?.service == null || box == null) return;
-    try {
-      final before = visibleMessages;
-      final idx = before.indexOf(m);
-      final result = await action(s!.service!, box);
-      final undo = result is UndoAction ? result : null;
-      if (removes) {
-        for (final list in [folderMessages, searchResults, for (final x in sessions) x.inboxMessages]) {
-          list.remove(m);
-        }
-        _mergedCache = null;
-        if (selected == m) {
-          final next = visibleMessages;
-          selected = next.isEmpty ? null : next[idx.clamp(0, next.length - 1)];
-          if (selected != null) unawaited(openMessage(selected!));
-        }
+  static String _count(int n, String what) => n == 1 ? what : '$what ($n messages)';
+
+  Future<void> setRead(List<MimeMessage> ms, bool read) =>
+      _actAll(ms, (svc, box, m) => svc.setSeen(box, m, read));
+
+  Future<void> setFlagged(List<MimeMessage> ms, bool flagged) =>
+      _actAll(ms, (svc, box, m) => svc.setFlagged(box, m, flagged));
+
+  /// Flags with one of Apple Mail's colours (see [MailService.flagColorNames]).
+  Future<void> setFlagColor(List<MimeMessage> ms, int color) =>
+      _actAll(ms, (svc, box, m) => svc.setFlagColor(box, m, color));
+
+  Future<void> deleteMessages(List<MimeMessage> ms) {
+    final forGood = ms.isNotEmpty && ms.every((m) => _box[m] != null && MailService.isTrash(_box[m]!));
+    return _actAll(ms, (svc, box, m) => svc.delete(box, m),
+        removes: true, done: (n) => _count(n, forGood ? 'Deleted' : 'Moved to Trash'));
+  }
+
+  Future<void> archiveMessages(List<MimeMessage> ms) =>
+      _actAll(ms, (svc, box, m) => svc.archive(box, m), removes: true, done: (n) => _count(n, 'Archived'));
+
+  Future<void> junkMessages(List<MimeMessage> ms) {
+    final notJunk = ms.isNotEmpty && ms.every(isInJunk);
+    return _actAll(ms, (svc, box, m) => MailService.isJunk(box) ? svc.notJunk(box, m) : svc.junk(box, m),
+        removes: true, done: (n) => _count(n, notJunk ? 'Moved to Inbox' : 'Moved to Junk'));
+  }
+
+  Future<void> moveMessages(List<MimeMessage> ms, Mailbox target) =>
+      _actAll(ms, (svc, box, m) => svc.moveTo(box, m, target),
+          removes: true, done: (n) => _count(n, 'Moved to ${target.name}'));
+
+  /// Runs [action] on each message. Removed messages leave the lists and
+  /// the selection moves on to the next one, like Mail. One toast (with
+  /// Undo when the server allows it) covers the whole batch.
+  Future<void> _actAll(
+    List<MimeMessage> ms,
+    Future<Object?> Function(MailService svc, Mailbox box, MimeMessage m) action, {
+    bool removes = false,
+    String Function(int n)? done,
+  }) async {
+    if (ms.isEmpty) return;
+    final before = visibleMessages;
+    final firstIdx = ms.map(before.indexOf).where((i) => i >= 0).fold<int?>(null, (a, b) => a == null ? b : math.min(a, b)) ?? 0;
+    final undos = <(UndoAction, AccountSession, Mailbox)>[];
+    final gone = <MimeMessage>[];
+    String? error;
+    for (final m in ms) {
+      final s = _owner[m];
+      final box = _box[m];
+      if (s?.service == null || box == null) continue;
+      try {
+        final result = await action(s!.service!, box, m);
+        if (result is UndoAction) undos.add((result, s, box));
+        gone.add(m);
+      } catch (e) {
+        error ??= friendlyError(e);
       }
-      if (done != null) {
-        showToast(Toast(done,
-            duration: Duration(seconds: undo == null ? 3 : 6),
-            action: undo == null ? null : 'Undo',
-            onAction: undo == null ? null : () => _undo(undo, s, box)));
+    }
+    if (removes && gone.isNotEmpty) {
+      final goneSet = Set<MimeMessage>.identity()..addAll(gone);
+      for (final list in [folderMessages, searchResults, for (final x in sessions) x.inboxMessages]) {
+        list.removeWhere(goneSet.contains);
       }
-    } catch (e) {
-      toast(friendlyError(e));
+      _mergedCache = null;
+      final hadSelection = selected != null && goneSet.contains(selected);
+      multi.removeWhere(goneSet.contains);
+      if (multi.length < 2) multi.clear();
+      if (hadSelection || (selected == null && ms.length > 1)) {
+        final next = visibleMessages;
+        selected = next.isEmpty ? null : next[firstIdx.clamp(0, next.length - 1)];
+        if (selected != null) unawaited(openMessage(selected!));
+      }
+    }
+    if (error != null) {
+      toast(error);
+    } else if (done != null && gone.isNotEmpty) {
+      final canUndo = undos.length == gone.length;
+      showToast(Toast(done(gone.length),
+          duration: Duration(seconds: canUndo ? 6 : 3),
+          action: canUndo ? 'Undo' : null,
+          onAction: canUndo ? () => _undoAll(undos) : null));
     }
     notifyListeners();
   }
 
+  Future<void> _undoAll(List<(UndoAction, AccountSession, Mailbox)> undos) async {
+    for (final (undo, s, box) in undos) {
+      await _undo(undo, s, box, reload: false);
+    }
+    final (_, s, box) = undos.last;
+    if (view.kind == ViewKind.folder && folderSession == s && folderBox?.path == box.path) {
+      await openFolder(s, box);
+    } else {
+      await refresh(quiet: true);
+    }
+  }
+
+  // ---- selecting several messages
+
+  /// Messages selected together with ⌘- or ⇧-click (empty for one).
+  final multi = Set<MimeMessage>.identity();
+
+  bool get hasMulti => multi.length > 1;
+
+  /// What toolbar, menu and shortcut actions apply to.
+  List<MimeMessage> get targets => hasMulti ? [for (final m in visibleMessages) if (multi.contains(m)) m] : [?selected];
+
+  bool isSelected(MimeMessage m) => hasMulti ? multi.contains(m) : identical(selected, m);
+
+  /// A click in the list: plain opens, ⌘ adds or removes, ⇧ selects a range.
+  void clickMessage(MimeMessage m, {bool toggle = false, bool range = false}) {
+    final list = visibleMessages;
+    if (range && selected != null) {
+      final a = list.indexOf(selected!);
+      final b = list.indexOf(m);
+      if (a >= 0 && b >= 0) {
+        multi
+          ..clear()
+          ..addAll(list.sublist(math.min(a, b), math.max(a, b) + 1));
+        if (multi.length < 2) multi.clear();
+        notifyListeners();
+        return;
+      }
+    }
+    if (toggle) {
+      if (multi.isEmpty && selected != null) multi.add(selected!);
+      if (!multi.remove(m)) multi.add(m);
+      if (multi.length < 2) {
+        final only = multi.isEmpty ? m : multi.first;
+        multi.clear();
+        unawaited(openMessage(only));
+      } else {
+        notifyListeners();
+      }
+      return;
+    }
+    multi.clear();
+    unawaited(openMessage(m));
+  }
+
+  void selectAll() {
+    final list = visibleMessages;
+    if (list.length < 2) return;
+    multi
+      ..clear()
+      ..addAll(list);
+    notifyListeners();
+  }
+
   /// Puts a moved or deleted message back, then reloads where it was.
-  Future<void> _undo(UndoAction undo, AccountSession s, Mailbox box) async {
+  Future<void> _undo(UndoAction undo, AccountSession s, Mailbox box, {bool reload = true}) async {
     try {
       await undo();
+      if (!reload) return;
       if (view.kind == ViewKind.folder && folderSession == s && folderBox?.path == box.path) {
         await openFolder(s, box);
       } else {
@@ -1097,18 +1296,20 @@ class AppState extends ChangeNotifier {
 
   // ------------------------------------------------------------ sending
 
-  final _pendingSends = <OutgoingMail, Timer>{};
+  /// Messages waiting out "Undo send", by their saved Outbox entry. They
+  /// are saved first, so a crash or force-quit sends them on next launch
+  /// instead of losing them.
+  final _pendingSends = <String, ({Timer timer, OutgoingMail mail, ScheduledMail entry})>{};
 
-  /// Sends [mail]: later if it has a send time, otherwise after the
-  /// "Undo send" delay. Returns once it is queued; problems arrive as toasts.
   /// Sends everything still waiting out its "Undo send" delay, right now.
   /// Called when the app quits, so nothing is lost.
   Future<void> flushPendingSends() async {
-    final pending = _pendingSends.keys.toList();
-    for (final mail in pending) {
-      _pendingSends.remove(mail)?.cancel();
+    final pending = _pendingSends.values.toList();
+    _pendingSends.clear();
+    for (final p in pending) {
+      p.timer.cancel();
     }
-    await Future.wait([for (final mail in pending) _deliver(mail)]);
+    await Future.wait([for (final p in pending) _deliverPending(p.entry, p.mail)]);
   }
 
   Future<void> sendMail(OutgoingMail mail) async {
@@ -1122,21 +1323,41 @@ class AppState extends ChangeNotifier {
       await _deliver(mail);
       return;
     }
-    _pendingSends[mail] = Timer(Duration(seconds: delay), () {
-      _pendingSends.remove(mail);
-      _deliver(mail);
+    final entry = await _schedule(mail.copyWith(sendAt: DateTime.now().add(Duration(seconds: delay))), quiet: true);
+    final timer = Timer(Duration(seconds: delay), () {
+      final p = _pendingSends.remove(entry.id);
+      if (p != null) unawaited(_deliverPending(p.entry, p.mail));
     });
+    _pendingSends[entry.id] = (timer: timer, mail: mail, entry: entry);
     showToast(Toast(
       'Sending in $delay seconds…',
       action: 'Undo',
       duration: Duration(seconds: delay),
-      onAction: () {
-        final t = _pendingSends.remove(mail);
-        if (t == null) return;
-        t.cancel();
+      onAction: () async {
+        final p = _pendingSends.remove(entry.id);
+        if (p == null) return;
+        p.timer.cancel();
+        await _dropScheduled(entry);
         _undone.add(mail);
       },
     ));
+  }
+
+  /// Sends an undo-delayed message, then removes its saved copy.
+  Future<void> _deliverPending(ScheduledMail entry, OutgoingMail mail) async {
+    await _deliver(mail);
+    await _dropScheduled(entry);
+  }
+
+  /// Removes an Outbox entry and its attachment copies.
+  Future<void> _dropScheduled(ScheduledMail m) async {
+    userData.scheduled.removeWhere((x) => x.id == m.id);
+    await userData.save();
+    try {
+      final dir = Directory('${(await getApplicationSupportDirectory()).path}/outbox/${m.id}');
+      if (await dir.exists()) await dir.delete(recursive: true);
+    } catch (_) {}
+    notifyListeners();
   }
 
   Future<void> _deliver(OutgoingMail mail) async {
@@ -1159,15 +1380,39 @@ class AppState extends ChangeNotifier {
       _reloadSentSoon(mail.from);
       toast('Message sent');
     } catch (e) {
-      showToast(Toast(
-        'Could not send "${mail.subject}": ${friendlyError(e)}',
-        action: 'Open',
-        duration: const Duration(seconds: 10),
-        onAction: () => _undone.add(mail),
-      ));
+      if (isTransientSendError(e)) {
+        // Offline or the server is busy: keep it in the Outbox and retry.
+        await _schedule(mail.copyWith(sendAt: DateTime.now()), outbox: true);
+      } else {
+        showToast(Toast(
+          'Could not send "${mail.subject}": ${friendlyError(e)}',
+          action: 'Open',
+          duration: const Duration(seconds: 10),
+          onAction: () => _undone.add(mail),
+        ));
+      }
     }
     notifyListeners();
   }
+
+  /// Network trouble or a temporary server refusal (SMTP 4xx), as opposed
+  /// to a problem with the message itself (bad address, too large, 5xx).
+  static bool isTransientSendError(Object e) {
+    if (e is SocketException || e is TimeoutException || e is HandshakeException) return true;
+    final t = e.toString().toLowerCase();
+    if (RegExp(r'\b5\d\d[ -]').hasMatch(t)) return false;
+    return RegExp(r'\b4\d\d[ -]').hasMatch(t) ||
+        t.contains('not connected') ||
+        t.contains('connection') ||
+        t.contains('network') ||
+        t.contains('timed out') ||
+        t.contains('timeout') ||
+        t.contains('host lookup') ||
+        t.contains('offline');
+  }
+
+  /// Outbox items that already failed once (so the user is told only once).
+  final _outboxWarned = <String>{};
 
   void _afterSent(AccountSession from, MimeMessage message, int? followUpDays) {
     for (final a in [...?message.to, ...?message.cc, ...?message.bcc]) {
@@ -1186,19 +1431,21 @@ class AppState extends ChangeNotifier {
     unawaited(userData.save());
   }
 
-  Future<void> _schedule(OutgoingMail mail) async {
-    // Copy attachments so they still exist when it is time to send.
+  Future<ScheduledMail> _schedule(OutgoingMail mail, {bool outbox = false, bool quiet = false}) async {
+    // Copy attachments so they still exist when it is time to send. Each
+    // gets its own folder so two files with the same name both survive.
     final dir = await getApplicationSupportDirectory();
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     final paths = <String>[];
-    for (final f in mail.files) {
-      final dest = File('${dir.path}/outbox/$id/${f.uri.pathSegments.last}');
+    for (var i = 0; i < mail.files.length; i++) {
+      final f = mail.files[i];
+      final dest = File('${dir.path}/outbox/$id/$i/${f.uri.pathSegments.last}');
       await dest.parent.create(recursive: true);
       await f.copy(dest.path);
       paths.add(dest.path);
     }
     final r = mail.inReplyTo;
-    userData.scheduled.add(ScheduledMail(
+    final entry = ScheduledMail(
       id: id,
       accountId: mail.from.id,
       sendAt: mail.sendAt!,
@@ -1210,59 +1457,110 @@ class AppState extends ChangeNotifier {
       inReplyToId: r?.getHeaderValue('message-id')?.trim(),
       references: r?.getHeaderValue('references')?.trim(),
       attachmentPaths: paths,
-    ));
+    );
+    userData.scheduled.add(entry);
     userData.scheduled.sort((a, b) => a.sendAt.compareTo(b.sendAt));
     await userData.save();
-    toast('Scheduled. It will be sent while Hearthmail is open on this computer.');
+    if (quiet) return entry;
+    toast(outbox
+        ? 'You seem to be offline. "${mail.subject}" is in Send Later and goes out as soon as you\'re back online.'
+        : 'Scheduled. It will be sent while Hearthmail is open on this computer.');
     notifyListeners();
+    return entry;
   }
 
-  Future<void> cancelScheduled(ScheduledMail m) async {
+  Future<void> cancelScheduled(ScheduledMail m) => _dropScheduled(m);
+
+  /// Opens a queued message in the composer (e.g. one that failed).
+  void editScheduled(ScheduledMail m) {
+    final s = sessionById(m.accountId) ?? defaultSendingSession;
+    if (s == null) return;
+    _undone.add(OutgoingMail(
+      from: s,
+      to: m.to,
+      cc: m.cc,
+      bcc: m.bcc,
+      subject: m.subject,
+      body: m.body,
+      files: [for (final p in m.attachmentPaths) if (File(p).existsSync()) File(p)],
+    ));
+    // The composer has its own copies now; remove the queued one.
     userData.scheduled.removeWhere((x) => x.id == m.id);
-    await userData.save();
-    for (final p in m.attachmentPaths) {
-      try {
-        await File(p).delete();
-      } catch (_) {}
-    }
+    unawaited(userData.save());
     notifyListeners();
   }
 
-  Future<void> sendScheduledNow(ScheduledMail m) => _sendScheduled(m);
+  Future<void> sendScheduledNow(ScheduledMail m) async {
+    // "Send Now" also retries one that failed.
+    final i = userData.scheduled.indexWhere((x) => x.id == m.id);
+    if (i < 0) return;
+    final fresh = userData.scheduled[i].withError(null);
+    userData.scheduled[i] = fresh;
+    _outboxWarned.remove(m.id);
+    await _sendScheduled(fresh);
+  }
+
+  /// Queued messages being sent right now (so a tick can't send twice).
+  final _sendingScheduled = <String>{};
 
   Future<void> _sendScheduled(ScheduledMail m) async {
-    final s = sessionById(m.accountId);
-    final service = s?.service;
-    if (s == null || service == null) return; // try again on the next tick
-    userData.scheduled.removeWhere((x) => x.id == m.id);
-    await userData.save();
+    if (_pendingSends.containsKey(m.id) || !_sendingScheduled.add(m.id)) return;
     try {
-      final message = service.build(
-        to: MailService.parseAddresses(m.to),
-        cc: MailService.parseAddresses(m.cc),
-        bcc: MailService.parseAddresses(m.bcc),
-        subject: m.subject,
-        markdownBody: m.body,
-        inReplyToId: m.inReplyToId,
-        references: m.references,
-        files: [for (final p in m.attachmentPaths) if (File(p).existsSync()) File(p)],
-      );
-      await service.sendBuilt(message);
-      _afterSent(s, message, null);
-      toast('Scheduled message "${m.subject}" sent');
-      for (final p in m.attachmentPaths) {
-        try {
-          await File(p).delete();
-        } catch (_) {}
+      final s = sessionById(m.accountId);
+      if (s == null) {
+        // The account was removed: keep the message, but ask the user.
+        _markFailed(m, 'The account it was sent from was removed.');
+        return;
       }
-    } catch (e) {
-      // Put it back so nothing is lost; it is retried on the next tick.
-      userData.scheduled.add(m);
-      await userData.save();
-      toast('Could not send scheduled "${m.subject}": ${friendlyError(e)}');
+      final service = s.service;
+      if (service == null || !s.connected) return; // offline: next tick
+      // Never send with an attachment silently missing.
+      final missing = [for (final p in m.attachmentPaths) if (!File(p).existsSync()) p.split('/').last];
+      if (missing.isNotEmpty) {
+        _markFailed(m, 'Attachment missing: ${missing.join(', ')}');
+        return;
+      }
+      try {
+        final message = service.build(
+          to: MailService.parseAddresses(m.to),
+          cc: MailService.parseAddresses(m.cc),
+          bcc: MailService.parseAddresses(m.bcc),
+          subject: m.subject,
+          markdownBody: m.body,
+          inReplyToId: m.inReplyToId,
+          references: m.references,
+          files: [for (final p in m.attachmentPaths) File(p)],
+        );
+        await service.sendBuilt(message);
+        _afterSent(s, message, null);
+        _reloadSentSoon(s);
+        // Only now is it safe to forget the queued copy.
+        await _dropScheduled(m);
+        toast('"${m.subject.isEmpty ? '(no subject)' : m.subject}" sent');
+      } catch (e) {
+        if (isTransientSendError(e)) {
+          if (_outboxWarned.add(m.id)) toast('Will keep trying to send "${m.subject}": ${friendlyError(e)}');
+        } else {
+          // Retrying won't help (bad address, too large…): wait for the user.
+          _markFailed(m, friendlyError(e));
+        }
+      }
+    } finally {
+      _sendingScheduled.remove(m.id);
     }
     notifyListeners();
   }
+
+  void _markFailed(ScheduledMail m, String why) {
+    final i = userData.scheduled.indexWhere((x) => x.id == m.id);
+    if (i < 0 || userData.scheduled[i].error != null) return;
+    userData.scheduled[i] = m.withError(why);
+    unawaited(userData.save());
+    showToast(Toast('Could not send "${m.subject}": $why', duration: const Duration(seconds: 8)));
+    notifyListeners();
+  }
+
+
 
   /// Saves [mail] to its account's Drafts, replacing the draft it continues.
   /// Returns the saved copy (null if the server didn't say where it went).
@@ -1300,7 +1598,15 @@ class AppState extends ChangeNotifier {
   /// Whether [m] lives in a Drafts folder (so it can be edited).
   bool isDraft(MimeMessage m) {
     final box = _box[m];
-    return m.hasFlag(MessageFlags.draft) || (box != null && (box.hasFlag(MailboxFlag.drafts) || box.name.toLowerCase().contains('draft')));
+    return m.hasFlag(MessageFlags.draft) || (box != null && _isDraftsBox(box));
+  }
+
+  /// The Drafts mailbox itself (by its special-use flag or standard name),
+  /// not any folder that merely has "draft" in its name.
+  static bool _isDraftsBox(Mailbox box) {
+    if (box.hasFlag(MailboxFlag.drafts)) return true;
+    final n = box.name.toLowerCase();
+    return const {'drafts', 'draft', 'entwürfe', 'brouillons', 'borradores', 'bozze'}.contains(n);
   }
 
   // ------------------------------------------------------------ timers
@@ -1316,7 +1622,7 @@ class AppState extends ChangeNotifier {
     try {
       final now = DateTime.now();
       for (final m in [...userData.scheduled]) {
-        if (!m.sendAt.isAfter(now)) await _sendScheduled(m);
+        if (!m.sendAt.isAfter(now) && m.error == null) await _sendScheduled(m);
       }
       var changed = false;
       for (final z in [...userData.snoozes.values]) {
@@ -1527,19 +1833,49 @@ class AppState extends ChangeNotifier {
 
   /// Leaves a mailing list: one-click when the sender supports it (RFC 8058),
   /// otherwise by email or by opening their unsubscribe page.
+  /// Addresses on this computer or a local network (never contacted on a
+  /// sender's behalf).
+  static bool _isPrivateHost(String host) {
+    final h = host.toLowerCase();
+    if (h == 'localhost' || h.endsWith('.local') || h.endsWith('.internal') || !h.contains('.')) return true;
+    final ip = InternetAddress.tryParse(h.replaceAll(RegExp(r'^\[|\]$'), ''));
+    if (ip == null) return false;
+    if (ip.isLoopback || ip.isLinkLocal) return true;
+    final b = ip.rawAddress;
+    if (ip.type == InternetAddressType.IPv4) {
+      return b[0] == 10 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168) || b[0] == 0;
+    }
+    return (b[0] & 0xfe) == 0xfc; // fc00::/7
+  }
+
+  /// Where unsubscribing will go, for the confirmation dialog.
+  String? unsubscribeTarget(MimeMessage m) {
+    final u = MailService.unsubscribeOf(m);
+    if (u == null) return null;
+    if (u.oneClick && u.web != null) return u.web!.host;
+    if (u.mail != null) return Uri.decodeComponent(u.mail!.path);
+    return u.web?.host;
+  }
+
   Future<String> unsubscribe(MimeMessage m) async {
     final u = MailService.unsubscribeOf(m);
     if (u == null) return 'This email has no unsubscribe option.';
-    if (u.oneClick && u.web != null) {
-      final res = await http.post(u.web!,
-          headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'List-Unsubscribe=One-Click');
-      if (res.statusCode < 400) return 'Unsubscribed. It can take a few days for the emails to stop.';
+    if (u.oneClick && u.web != null && u.web!.scheme == 'https' && !_isPrivateHost(u.web!.host)) {
+      try {
+        final res = await http
+            .post(u.web!, headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'List-Unsubscribe=One-Click')
+            .timeout(const Duration(seconds: 15));
+        if (res.statusCode < 400) return 'Unsubscribed. It can take a few days for the emails to stop.';
+      } catch (_) {
+        // Fall through to the other ways.
+      }
     }
     if (u.mail != null) {
       final s = _owner[m];
       final service = s?.service;
-      if (service != null) {
-        final to = MailAddress(null, u.mail!.path);
+      final address = Uri.decodeComponent(u.mail!.path).split(',').first.trim();
+      if (service != null && RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(address)) {
+        final to = MailAddress(null, address);
         final subject = u.mail!.queryParameters['subject'] ?? 'unsubscribe';
         await service.sendBuilt(service.build(to: [to], subject: subject, markdownBody: u.mail!.queryParameters['body'] ?? 'unsubscribe'));
         return 'Unsubscribe request sent by email.';
@@ -1556,7 +1892,29 @@ class AppState extends ChangeNotifier {
 
   /// Downloads an attachment. With [open], opens it in its default app;
   /// otherwise saves it to Downloads. Returns the file.
-  Future<File> saveAttachment(MimeMessage m, ContentInfo info, {bool open = false}) async {
+  /// File types that open without a warning: documents, pictures and
+  /// media. Anything else (apps, scripts, installers, profiles, web pages,
+  /// archives…) asks first.
+  static const safeExtensions = {
+    'jpg', 'jpeg', 'png', 'gif', 'heic', 'heif', 'webp', 'tif', 'tiff', 'bmp',
+    'pdf', 'txt', 'csv', 'md', 'rtf', 'ics', 'vcf',
+    'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'pages', 'numbers', 'key', 'odt', 'ods', 'odp',
+    'mp3', 'm4a', 'wav', 'aac', 'mp4', 'mov', 'm4v',
+  };
+
+  static bool isRiskyAttachment(String? name) {
+    final n = (name ?? '').toLowerCase();
+    final dot = n.lastIndexOf('.');
+    return dot < 0 || !safeExtensions.contains(n.substring(dot + 1));
+  }
+
+  /// Shows an attachment in Quick Look (macOS's preview panel).
+  Future<void> quickLook(MimeMessage m, ContentInfo info) async {
+    final f = await saveAttachment(m, info, open: false, temp: true);
+    await Process.start('/usr/bin/qlmanage', ['-p', f.path], mode: ProcessStartMode.detached);
+  }
+
+  Future<File> saveAttachment(MimeMessage m, ContentInfo info, {bool open = false, bool temp = false}) async {
     final s = _owner[m];
     final box = _box[m];
     if (s?.service == null || box == null) throw Exception('Not connected.');
@@ -1565,14 +1923,14 @@ class AppState extends ChangeNotifier {
     if (bytes == null) throw Exception('The attachment is empty.');
     final name = (info.fileName ?? 'attachment').replaceAll(RegExp(r'[/\\:]'), '_');
     final Directory dir;
-    if (open) {
+    if (open || temp) {
       dir = Directory('${(await getTemporaryDirectory()).path}/attachments/${DateTime.now().millisecondsSinceEpoch}');
     } else {
       dir = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
     }
     await dir.create(recursive: true);
     var file = File('${dir.path}/$name');
-    if (!open) {
+    if (!open && !temp) {
       var i = 1;
       final dot = name.lastIndexOf('.');
       while (await file.exists()) {
@@ -2291,7 +2649,7 @@ class AppState extends ChangeNotifier {
     final box = _box[d];
     final service = (_owner[d] ?? mail.from).service;
     if (box == null || service == null) return;
-    if (!box.hasFlag(MailboxFlag.drafts) && !box.name.toLowerCase().contains('draft')) return;
+    if (!_isDraftsBox(box)) return; // never delete outside Drafts
     _deletedDrafts[d] = true;
     try {
       await service.deleteDraft(box, d);
@@ -2453,6 +2811,37 @@ class AppState extends ChangeNotifier {
 
   /// Applies server truth for the newest page to what is already loaded:
   /// updated flags, and messages removed elsewhere.
+  /// Brings read/flag state of every loaded Inbox message (not just the
+  /// newest page) up to date, and drops ones that left the Inbox elsewhere.
+  Future<void> _syncFlags(AccountSession s) async {
+    final service = s.service;
+    final inbox = s.inbox;
+    if (service == null || inbox == null || !s.connected) return;
+    final loaded = [for (final m in s.inboxMessages) if (m.uid != null) m];
+    if (loaded.length <= 40) return; // the page refresh already covers these
+    try {
+      final flags = await service.fetchFlags(inbox, [for (final m in loaded) m.uid!]);
+      if (flags.isEmpty) return;
+      var changed = false;
+      for (final m in loaded) {
+        final f = flags[m.uid];
+        if (f == null) continue;
+        if (f.length != (m.flags?.length ?? 0) || !f.every((x) => m.flags?.contains(x) ?? false)) {
+          m.flags = f;
+          changed = true;
+        }
+      }
+      final before = s.inboxMessages.length;
+      s.inboxMessages.removeWhere((m) => m.uid != null && !flags.containsKey(m.uid) && !identical(m, selected));
+      if (changed || s.inboxMessages.length != before) {
+        _mergedCache = null;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Next refresh tries again.
+    }
+  }
+
   void _syncPage(AccountSession s, List<MimeMessage> latest) {
     final byUid = {for (final m in latest) if (m.uid != null) m.uid!: m};
     if (byUid.isEmpty) return;
@@ -2565,8 +2954,8 @@ class AppState extends ChangeNotifier {
     _disposeInstantMail();
     _refreshTimer?.cancel();
     _tickTimer?.cancel();
-    for (final t in _pendingSends.values) {
-      t.cancel();
+    for (final p in _pendingSends.values) {
+      p.timer.cancel(); // their saved Outbox entries are sent on next launch
     }
     _undone.close();
     for (final s in sessions) {

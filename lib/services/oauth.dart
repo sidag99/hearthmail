@@ -81,7 +81,9 @@ class OAuthClient {
     final done = Completer<Map<String, String>>();
     Future<void> handle(HttpRequest req) async {
       final q = req.uri.queryParameters;
-      if (!q.containsKey('code') && !q.containsKey('error')) {
+      // Only the browser coming back from this sign-in (matching state)
+      // counts; anything else is ignored and we keep waiting.
+      if ((!q.containsKey('code') && !q.containsKey('error')) || q['state'] != state) {
         req.response.statusCode = 404;
         await req.response.close();
         return;

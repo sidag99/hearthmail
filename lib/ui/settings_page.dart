@@ -71,10 +71,14 @@ class _SettingsWindowState extends State<SettingsWindow> {
           insetPadding: const EdgeInsets.all(16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            width: (size.width - 32).clamp(320, 820),
-            height: (size.height - 32).clamp(360, 680),
-            child: Column(children: [
+          // Sized to the tab's content, like Mail's settings window.
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: (size.width - 32).clamp(320, 780),
+              maxWidth: (size.width - 32).clamp(320, 780),
+              maxHeight: (size.height - 32).clamp(300, 720),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
               // Title, like the window title of Mail's settings.
               SizedBox(
                 height: 30,
@@ -94,7 +98,7 @@ class _SettingsWindowState extends State<SettingsWindow> {
               ),
               _TabBar(selected: _tab, onSelect: _select),
               const Hairline(),
-              Expanded(
+              Flexible(
                 child: SingleChildScrollView(
                   key: PageStorageKey(_tab),
                   padding: const EdgeInsets.fromLTRB(28, 22, 28, 28),
@@ -306,15 +310,17 @@ class _EntryList extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = MacColors.of(context);
     return Container(
-      constraints: const BoxConstraints(minHeight: 80, maxHeight: 220),
+      constraints: BoxConstraints(minHeight: entries.isEmpty ? 0 : 80, maxHeight: entries.isEmpty ? 90 : 220),
       decoration: BoxDecoration(border: Border.all(color: c.separator), borderRadius: BorderRadius.circular(6)),
       child: entries.isEmpty
-          ? Center(
+          ? SizedBox(
+              height: 80,
+              child: Center(
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(empty, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: c.secondaryLabel)),
               ),
-            )
+            ))
           : ListView(shrinkWrap: true, padding: const EdgeInsets.symmetric(vertical: 2), children: [
               for (final e in entries)
                 Padding(
@@ -638,10 +644,9 @@ class _ViewingTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = _st(context).settings;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _Row('List preview', const SizedBox.shrink()),
-      Padding(
-        padding: const EdgeInsets.only(left: 200),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _Row(
+        'Message list',
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _Check('Show contact photos in the message list', s.showContactPhotos,
               (v) => _save(context, s.copyWith(showContactPhotos: v))),
           _Check('Group messages by conversation', s.groupConversations,
@@ -845,8 +850,32 @@ class _AiTab extends StatelessWidget {
     final state = _st(context);
     final s = state.settings;
     final embedders = state.availableModels.where(AppState.isEmbeddingModel).toList();
+    final c = MacColors.of(context);
+    final theme = Theme.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const AiSettingsPane(),
+      // The AI pane's fields, drawn like the rest of this window.
+      Theme(
+        data: theme.copyWith(
+          inputDecorationTheme: InputDecorationTheme(
+            isDense: true,
+            filled: true,
+            fillColor: c.fill,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: c.accent)),
+            labelStyle: TextStyle(fontSize: 12, color: c.secondaryLabel),
+            floatingLabelStyle: TextStyle(fontSize: 12, color: c.secondaryLabel),
+            helperStyle: TextStyle(fontSize: 11, color: c.secondaryLabel),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          ),
+          textTheme: theme.textTheme.copyWith(
+            titleMedium: theme.textTheme.titleMedium?.copyWith(fontSize: 13, fontWeight: FontWeight.w600, color: c.label),
+            bodyLarge: theme.textTheme.bodyLarge?.copyWith(fontSize: 13, color: c.label),
+            bodyMedium: theme.textTheme.bodyMedium?.copyWith(fontSize: 13, color: c.label),
+          ),
+        ),
+        child: const AiSettingsPane(),
+      ),
       _Group('Search', [
         _Check(
           'Search by meaning',

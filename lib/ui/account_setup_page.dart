@@ -29,6 +29,9 @@ class _AccountSetupPageState extends State<AccountSetupPage> {
 
   ProviderPreset? _preset;
   bool _advanced = false;
+
+  /// Shown when looked-up servers belong to a different domain.
+  String? _serverNote;
   bool _busy = false;
   bool _discovering = false;
   String? _error;
@@ -86,7 +89,26 @@ class _AccountSetupPageState extends State<AccountSetupPage> {
       final imap = cfg?.preferredIncomingImapServer;
       final smtp = cfg?.preferredOutgoingSmtpServer;
       if (imap != null && smtp != null && mounted) {
+        // Part of this lookup can travel unencrypted, so servers outside the
+        // address's own domain are shown for the user to check first.
+        final domain = email.split('@').last.toLowerCase();
+        bool ours(String? h) {
+          final host = (h ?? '').toLowerCase();
+          final base = domain.split('.').length > 2 ? domain.split('.').skip(domain.split('.').length - 2).join('.') : domain;
+          // Big providers host many custom domains (Workspace, Microsoft 365…).
+          const known = ['gmail.com', 'googlemail.com', 'office365.com', 'outlook.com', 'icloud.com', 'me.com',
+              'yahoo.com', 'fastmail.com', 'zoho.com', 'zoho.eu', 'gmx.net', 'gmx.com', 'web.de', 'ionos.com', 'mailbox.org'];
+          return host == domain ||
+              host.endsWith('.$domain') ||
+              host.endsWith('.$base') ||
+              known.any((k) => host == k || host.endsWith('.$k'));
+        }
+        final foreign = !ours(imap.hostname) || !ours(smtp.hostname);
         setState(() {
+          _serverNote = foreign
+              ? 'These servers are not at $domain. Make sure they belong to your email provider before signing in.'
+              : null;
+          if (foreign) _advanced = true;
           _imapHost.text = imap.hostname;
           _imapPort.text = '${imap.port}';
           _smtpHost.text = smtp.hostname;
@@ -626,6 +648,11 @@ class _AccountSetupPageState extends State<AccountSetupPage> {
                       ),
                       label: const Text('Server settings'),
                     ),
+                    if (_advanced && _serverNote != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(_serverNote!, style: TextStyle(fontSize: 12, color: theme.colorScheme.error)),
+                      ),
                     if (_advanced) ...[
                       Row(
                         children: [

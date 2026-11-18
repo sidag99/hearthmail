@@ -203,11 +203,22 @@ class _HomePageState extends State<HomePage> {
       reply: on((m) => openReply(context, m)),
       replyAll: on((m) => openReply(context, m, replyAll: true)),
       forward: on((m) => openForward(context, m)),
-      archive: on((m) => state.archiveMessage(m)),
-      junk: on((m) => state.junkMessage(m)),
-      delete: on((m) => state.deleteMessage(m)),
-      flag: on((m) => state.toggleFlag(m)),
-      markUnread: on((m) => state.toggleRead(m)),
+      // These act on every selected message.
+      archive: m == null ? null : () => state.archiveMessages(state.targets),
+      junk: m == null ? null : () => state.junkMessages(state.targets),
+      delete: m == null ? null : () => state.deleteMessages(state.targets),
+      flag: m == null
+          ? null
+          : () => state.setFlagged(
+              state.targets,
+              !state.targets.every((x) => x.isFlagged),
+            ),
+      markUnread: m == null
+          ? null
+          : () => state.setRead(
+              state.targets,
+              !state.targets.every((x) => x.isSeen),
+            ),
       remind: m == null
           ? null
           : () async {
@@ -256,9 +267,9 @@ class _HomePageState extends State<HomePage> {
             meta: true,
             control: true,
           ): () =>
-              state.archiveMessage(selected),
+              state.archiveMessages(state.targets),
           const SingleActivator(LogicalKeyboardKey.backspace, meta: true): () =>
-              state.deleteMessage(selected),
+              state.deleteMessages(state.targets),
           const SingleActivator(
             LogicalKeyboardKey.keyU,
             meta: true,
@@ -276,14 +287,20 @@ class _HomePageState extends State<HomePage> {
             meta: true,
             shift: true,
           ): () =>
-              state.junkMessage(selected),
+              state.junkMessages(state.targets),
         },
         // Mail: Delete moves to Trash; arrows go through the list.
-        const SingleActivator(LogicalKeyboardKey.backspace): () => state.deleteMessage(selected),
-        const SingleActivator(LogicalKeyboardKey.delete): () => state.deleteMessage(selected),
+        const SingleActivator(LogicalKeyboardKey.backspace): () =>
+            state.deleteMessages(state.targets),
+        const SingleActivator(LogicalKeyboardKey.delete): () =>
+            state.deleteMessages(state.targets),
       },
-      const SingleActivator(LogicalKeyboardKey.arrowDown): () => state.selectAdjacent(1),
-      const SingleActivator(LogicalKeyboardKey.arrowUp): () => state.selectAdjacent(-1),
+      const SingleActivator(LogicalKeyboardKey.keyA, meta: true):
+          state.selectAll,
+      const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+          state.selectAdjacent(1),
+      const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+          state.selectAdjacent(-1),
     };
 
     final Widget body;

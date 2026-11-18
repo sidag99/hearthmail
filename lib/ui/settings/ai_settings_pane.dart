@@ -12,6 +12,13 @@ import '../../state/app_state.dart';
 /// All AI settings in one scrollable-friendly column: local Ollama, which
 /// engine runs which job, and the cloud / CLI engines. Reads [AppState] from
 /// Provider. Embed it inside any page (it does not scroll by itself).
+/// An Ollama address on another computer reached without encryption.
+bool _plainRemote(String url) {
+  final u = Uri.tryParse(url);
+  if (u == null || u.scheme != 'http') return false;
+  return !const {'localhost', '127.0.0.1', '::1', '[::1]'}.contains(u.host.toLowerCase());
+}
+
 class AiSettingsPane extends StatefulWidget {
   const AiSettingsPane({super.key});
 
@@ -98,7 +105,9 @@ class _AiSettingsPaneState extends State<AiSettingsPane> {
           label: title,
           help: help,
           value: engine,
-          options: AiEngine.all,
+          // Codex only writes (it can't be fully stripped of tools, and
+          // background jobs read every incoming email unattended).
+          options: writing ? AiEngine.all : [for (final e in AiEngine.all) if (e != AiEngine.codexCli) e],
           text: engineText,
           onChanged: (e) => set(e, ''),
         ),
@@ -169,9 +178,12 @@ class _AiSettingsPaneState extends State<AiSettingsPane> {
           Expanded(
             child: TextField(
               controller: _url,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Ollama address',
-                helperText: 'Use another computer\'s address to use its AI.',
+                helperText: _plainRemote(s.ollamaUrl)
+                    ? 'Warning: emails are sent to this computer unencrypted. Use https or a trusted network only.'
+                    : 'Use another computer\'s address to use its AI.',
+                helperMaxLines: 2,
               ),
               onSubmitted: (v) => save(s.copyWith(ollamaUrl: v.trim())),
             ),
